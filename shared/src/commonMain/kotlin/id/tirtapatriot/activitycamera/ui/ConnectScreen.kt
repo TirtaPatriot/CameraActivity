@@ -7,7 +7,14 @@ import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.safeDrawingPadding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.material3.Icon
+import androidx.compose.material3.TextButton
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.text.KeyboardOptions
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
@@ -39,6 +46,7 @@ fun ConnectScreen(
     cameraPermissionGranted: Boolean,
     onRequestPermissions: () -> Unit,
     onConnected: (serverUrl: String, config: AppConfig) -> Unit,
+    onLater: () -> Unit,
 ) {
     val strings = LocalStrings.current
     val scope = rememberCoroutineScope()
@@ -84,16 +92,22 @@ fun ConnectScreen(
     }
 
     Column(
-        Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
+        Modifier.fillMaxSize().background(Palette.Background).safeDrawingPadding().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(16.dp, Alignment.CenterVertically),
     ) {
-        Text(strings.connectTitle, style = MaterialTheme.typography.headlineSmall)
+        Icon(AppIcons.Server, null, tint = MaterialTheme.colorScheme.primary, modifier = Modifier.size(36.dp))
+        Text(strings.connectTitle, style = MaterialTheme.typography.headlineSmall, fontWeight = FontWeight.Bold)
         Text(strings.connectIntro, style = MaterialTheme.typography.bodyMedium)
         Button(
             onClick = { if (cameraPermissionGranted) isScanning = true else onRequestPermissions() },
             enabled = !isBusy,
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(strings.scanQr) }
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+        ) {
+            Icon(AppIcons.Qr, null, modifier = Modifier.size(20.dp))
+            Spacer(Modifier.size(10.dp))
+            Text(strings.scanQr, fontWeight = FontWeight.SemiBold)
+        }
         OutlinedTextField(
             value = address,
             onValueChange = { address = it.trim() },
@@ -105,6 +119,7 @@ fun ConnectScreen(
             modifier = Modifier.fillMaxWidth(),
         )
         OutlinedButton(
+            shape = RoundedCornerShape(14.dp),
             onClick = {
                 val url = ServerApi.normalizeUrl(address)
                 if (url == null) error = strings.connectFailed else connect(url)
@@ -113,5 +128,8 @@ fun ConnectScreen(
             modifier = Modifier.fillMaxWidth(),
         ) { Text(if (isBusy) strings.connecting else strings.connect) }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        TextButton(onClick = onLater, enabled = !isBusy, modifier = Modifier.align(Alignment.CenterHorizontally)) {
+            Text(strings.laterToCamera)
+        }
     }
 }

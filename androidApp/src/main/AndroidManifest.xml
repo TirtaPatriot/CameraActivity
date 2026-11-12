@@ -12,6 +12,7 @@
 
     <!-- usesCleartextTraffic: sync server on the internal network (http). Disable once the server uses https. -->
     <application
+        android:name=".ActivityCameraApplication"
         android:allowBackup="false"
         android:label="@string/app_name"
         android:usesCleartextTraffic="true"
@@ -26,5 +27,16 @@
                 <category android:name="android.intent.category.LAUNCHER" />
             </intent-filter>
         </activity>
+
+        <!-- Shares captures with other apps (WhatsApp, Telegram, e-mail…) without storage permissions. -->
+        <provider
+            android:name="androidx.core.content.FileProvider"
+            android:authorities="${applicationId}.files"
+            android:exported="false"
+            android:grantUriPermissions="true">
+            <meta-data
+                android:name="android.support.FILE_PROVIDER_PATHS"
+                android:resource="@xml/file_paths" />
+        </provider>
     </application>
 </manifest>

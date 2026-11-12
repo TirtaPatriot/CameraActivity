@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<paths>
+    <!-- mediaDirectory(): getExternalFilesDir(Pictures)/ActivityCamera, or filesDir as a fallback -->
+    <external-files-path name="media" path="Pictures/" />
+    <files-path name="media_internal" path="ActivityCamera/" />
+</paths>

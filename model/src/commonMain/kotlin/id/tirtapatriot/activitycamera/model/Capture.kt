@@ -69,6 +69,10 @@ data class CaptureSummary(
     val uploadedAtEpochMs: Long,
 )
 
+/** Sent when a capture is shared after it was already uploaded. */
+@Serializable
+data class ShareReport(val sharedAtEpochMs: Long)
+
 @Serializable
 data class ErrorResponse(val error: String)
 
@@ -81,4 +85,7 @@ object ApiContract {
     const val CAPTURES = "/api/v1/captures"
     const val PART_METADATA = "metadata"
     const val PART_FILE = "file"
+
+    /** POST [ShareReport]: records that an uploaded capture was shared from the phone. */
+    fun sharedPath(clientId: String) = "$CAPTURES/$clientId/shared"
 }

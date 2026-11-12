@@ -5,6 +5,7 @@ import kotlinx.io.files.Path
 import kotlinx.io.files.SystemFileSystem
 import kotlinx.io.readString
 import kotlinx.io.writeString
+import kotlin.random.Random
 
 /** Cross-platform local file access based on kotlinx-io. */
 internal object LocalFiles {
@@ -23,9 +24,9 @@ internal object LocalFiles {
         return SystemFileSystem.source(p).buffered().use { it.readString() }
     }
 
-    /** Writes through a temp file then moves it, so the index survives the app dying mid-write. */
+    /** Writes through a unique temp file then moves it, so a file survives the app dying mid-write. */
     fun writeText(path: String, text: String) {
-        val tmp = Path("$path.tmp")
+        val tmp = Path("$path.${Random.nextLong().toULong()}.tmp")
         SystemFileSystem.sink(tmp).buffered().use { it.writeString(text) }
         SystemFileSystem.atomicMove(tmp, Path(path))
     }

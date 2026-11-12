@@ -10,8 +10,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import kotlinx.coroutines.withContext
 import kotlinx.serialization.Serializable
-import kotlinx.serialization.decodeFromString
-import kotlinx.serialization.encodeToString
+import kotlinx.serialization.builtins.ListSerializer
 import kotlinx.serialization.json.Json
 
 @Serializable
@@ -25,7 +24,13 @@ data class CaptureRecord(
     val status: SyncStatus = SyncStatus.PENDING,
     val serverId: Long? = null,
     val lastError: String? = null,
-)
+    /** First time the officer opened the share sheet for this capture. */
+    val sharedAtEpochMs: Long? = null,
+    /** The server already knows about [sharedAtEpochMs]. */
+    val sharedReported: Boolean = false,
+) {
+    val clientId: String get() = meta.clientId
+}
 
 /**
  * Captures stored on the device, persisted as index.json in the media folder.
@@ -35,8 +40,10 @@ class CaptureRepository(private val baseDir: String = mediaDirectory()) {
     private val json = Json { ignoreUnknownKeys = true }
     private val mutex = Mutex()
     private val indexPath = "$baseDir/index.json"
+    private val listSerializer = ListSerializer(CaptureRecord.serializer())
 
     private val _items = MutableStateFlow<List<CaptureRecord>>(emptyList())
+    /** Newest first. */
     val items: StateFlow<List<CaptureRecord>> = _items.asStateFlow()
 
     init {
@@ -46,22 +53,31 @@ class CaptureRepository(private val baseDir: String = mediaDirectory()) {
 
     fun filePath(fileName: String): String = "$baseDir/$fileName"
 
+    fun filePath(record: CaptureRecord): String = filePath(record.fileName)
+
+    fun find(clientId: String): CaptureRecord? = _items.value.firstOrNull { it.clientId == clientId }
+
     private fun load(): List<CaptureRecord> =
         LocalFiles.readText(indexPath)
-            ?.let { runCatching { json.decodeFromString<List<CaptureRecord>>(it) }.getOrNull() }
+            ?.let { runCatching { json.decodeFromString(listSerializer, it) }.getOrNull() }
             .orEmpty()
 
     suspend fun add(record: CaptureRecord) = mutate { listOf(record) + it }
 
     suspend fun update(clientId: String, change: (CaptureRecord) -> CaptureRecord) = mutate { list ->
-        list.map { if (it.meta.clientId == clientId) change(it) else it }
+        list.map { if (it.clientId == clientId) change(it) else it }
+    }
+
+    /** Marks captures as shared now (only the first share counts). */
+    suspend fun markShared(clientIds: Collection<String>, atEpochMs: Long) = mutate { list ->
+        list.map { if (it.clientId in clientIds && it.sharedAtEpochMs == null) it.copy(sharedAtEpochMs = atEpochMs) else it }
     }
 
     private suspend fun mutate(change: (List<CaptureRecord>) -> List<CaptureRecord>) =
         withContext(Dispatchers.Default) {
             mutex.withLock {
                 val next = change(_items.value)
-                LocalFiles.writeText(indexPath, json.encodeToString(next))
+                LocalFiles.writeText(indexPath, json.encodeToString(listSerializer, next))
                 _items.value = next
             }
         }

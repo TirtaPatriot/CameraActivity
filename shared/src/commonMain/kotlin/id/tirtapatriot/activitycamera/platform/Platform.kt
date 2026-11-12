@@ -1,5 +1,7 @@
 package id.tirtapatriot.activitycamera.platform
 
+import androidx.compose.runtime.Composable
+
 expect object PlatformInfo {
     /** "android" or "ios" */
     val name: String
@@ -10,3 +12,7 @@ expect object PlatformInfo {
 
 /** Local app folder holding photos/videos plus index.json. */
 expect fun mediaDirectory(): String
+
+/** System back (Android back gesture/button); no-op on iOS. */
+@Composable
+expect fun PlatformBackHandler(enabled: Boolean = true, onBack: () -> Unit)

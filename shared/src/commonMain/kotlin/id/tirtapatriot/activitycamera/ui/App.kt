@@ -1,13 +1,16 @@
 package id.tirtapatriot.activitycamera.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.height
 import androidx.compose.foundation.layout.padding
+import androidx.compose.foundation.layout.size
+import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Button
-import androidx.compose.material3.Surface
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.CompositionLocalProvider
@@ -16,112 +19,134 @@ import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
-import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
-import id.tirtapatriot.activitycamera.data.CaptureRepository
-import id.tirtapatriot.activitycamera.data.SettingsStore
-import id.tirtapatriot.activitycamera.data.SyncStatus
+import id.tirtapatriot.activitycamera.AppGraph
 import id.tirtapatriot.activitycamera.i18n.LocalStrings
 import id.tirtapatriot.activitycamera.i18n.stringsFor
 import id.tirtapatriot.activitycamera.location.rememberLocationProvider
-import id.tirtapatriot.activitycamera.sync.ServerApi
-import id.tirtapatriot.activitycamera.sync.SyncClient
+import id.tirtapatriot.activitycamera.platform.PlatformBackHandler
 import kotlinx.coroutines.launch
 
-private enum class Screen { CAMERA, GALLERY, SETTINGS }
+private sealed interface Route {
+    data object Camera : Route
+    data class Review(val clientId: String) : Route
+    data object History : Route
+    data object Account : Route
+    data object Connect : Route
+    data object Login : Route
+}
 
 /**
- * Root UI shared by Android and iOS: connect to a server → sign in → camera.
- * Branding, colors and capture rules come from the server (cached for offline use).
+ * Root UI shared by Android and iOS. The camera is always the first screen; a server and an
+ * account are optional and only suggested. Branding, rules and tasks come from the server
+ * (cached for offline use).
  * @param cameraPermissionGranted always true on iOS (the system prompts when the camera is opened).
  */
 @Composable
 fun App(cameraPermissionGranted: Boolean, onRequestPermissions: () -> Unit) {
-    val repository = remember { CaptureRepository() }
-    val settingsStore = remember { SettingsStore() }
-    val api = remember { ServerApi() }
-    val syncClient = remember { SyncClient(repository, settingsStore, api) }
-    val settings by settingsStore.settings.collectAsState()
-    val scope = rememberCoroutineScope()
-    var screen by remember { mutableStateOf(Screen.CAMERA) }
-    var loginNotice by remember { mutableStateOf<String?>(null) }
+    val store = AppGraph.settingsStore
+    val api = AppGraph.api
+    val settings by store.settings.collectAsState()
+    var stack by remember { mutableStateOf(listOf<Route>(Route.Camera)) }
+    val route = stack.last()
 
-    // Refresh branding & rules whenever the app starts or the server changes; keep the cached copy offline.
+    fun push(next: Route) {
+        stack = stack + next
+    }
+
+    fun pop() {
+        if (stack.size > 1) stack = stack.dropLast(1)
+    }
+
+    fun popToCamera() {
+        stack = listOf(Route.Camera)
+    }
+
+    // Fresh rules & tasks, and anything left to upload, every time the app starts or the server changes.
     LaunchedEffect(settings.serverUrl) {
-        if (!settings.isConnected) return@LaunchedEffect
-        runCatching { api.fetchConfig(settings.serverUrl) }.onSuccess { latest ->
-            if (latest != settingsStore.settings.value.serverConfig) settingsStore.update { it.copy(serverConfig = latest) }
-        }
+        AppGraph.refreshConfig()
+        AppGraph.requestSync()
     }
-    LaunchedEffect(settings.isSignedIn) {
-        if (!settings.isSignedIn) screen = Screen.CAMERA
+    // A sign-in or a server allowing anonymous phones may unblock waiting uploads.
+    LaunchedEffect(settings.canUpload, settings.authToken) {
+        if (settings.canUpload) AppGraph.requestSync()
     }
+
+    PlatformBackHandler(enabled = stack.size > 1) { pop() }
 
     val strings = stringsFor(settings.effectiveLanguage)
-
     CompositionLocalProvider(LocalStrings provides strings) {
         BrandedTheme(settings.config.branding.primaryColor) {
-            Surface(Modifier.fillMaxSize()) {
-                when {
-                    !settings.isConnected -> ConnectScreen(
-                        api = api,
-                        cameraPermissionGranted = cameraPermissionGranted,
-                        onRequestPermissions = onRequestPermissions,
-                        onConnected = { url, config -> settingsStore.connect(url, config) },
-                    )
-
-                    !settings.isSignedIn -> LoginScreen(
-                        settings = settings,
-                        api = api,
-                        notice = loginNotice,
-                        onSignedIn = { token, user ->
-                            loginNotice = null
-                            settingsStore.signedIn(token, user)
-                        },
-                        onChangeServer = { settingsStore.disconnect() },
-                    )
-
-                    else -> when (screen) {
-                        Screen.CAMERA ->
-                            if (cameraPermissionGranted) {
-                                val locationProvider = rememberLocationProvider()
-                                CameraScreen(
-                                    repository = repository,
-                                    settings = settings,
-                                    locationProvider = locationProvider,
-                                    onOpenGallery = { screen = Screen.GALLERY },
-                                    onOpenSettings = { screen = Screen.SETTINGS },
-                                )
-                            } else {
-                                PermissionPrompt(onRequestPermissions)
-                            }
-
-                        Screen.GALLERY -> GalleryScreen(
-                            repository = repository,
-                            syncClient = syncClient,
-                            onSessionExpired = { loginNotice = strings.sessionExpired },
-                            onBack = { screen = Screen.CAMERA },
-                        )
-
-                        Screen.SETTINGS -> SettingsScreen(
+            when (val current = route) {
+                Route.Camera ->
+                    if (cameraPermissionGranted) {
+                        CameraScreen(
                             settings = settings,
-                            api = api,
-                            pendingCount = repository.items.value.count { it.status != SyncStatus.SYNCED },
-                            onLanguageChange = { language -> settingsStore.update { it.copy(language = language) } },
-                            onSignOut = {
-                                val token = settings.authToken
-                                val serverUrl = settings.serverUrl
-                                settingsStore.signOut()
-                                if (token != null) scope.launch { api.logout(serverUrl, token) }
-                            },
-                            onBack = { screen = Screen.CAMERA },
+                            locationProvider = rememberLocationProvider(),
+                            onOpenReview = { push(Route.Review(it)) },
+                            onOpenHistory = { push(Route.History) },
+                            onOpenAccount = { push(Route.Account) },
                         )
+                    } else {
+                        PermissionPrompt(onRequestPermissions)
                     }
-                }
+
+                is Route.Review -> ReviewScreen(
+                    settings = settings,
+                    clientId = current.clientId,
+                    onBack = { pop() },
+                    onRetake = { popToCamera() },
+                )
+
+                Route.History -> HistoryScreen(
+                    settings = settings,
+                    onBack = { pop() },
+                    onOpen = { push(Route.Review(it)) },
+                    onOpenAccount = { push(Route.Account) },
+                )
+
+                Route.Account -> AccountScreen(
+                    settings = settings,
+                    onBack = { pop() },
+                    onSignIn = { push(Route.Login) },
+                    onConnect = { push(Route.Connect) },
+                    onSignOut = {
+                        val token = settings.authToken
+                        val serverUrl = settings.serverUrl
+                        store.signOut()
+                        if (token != null) AppGraph.appScope.launch { api.logout(serverUrl, token) }
+                    },
+                    onDisconnect = { store.disconnect() },
+                )
+
+                Route.Connect -> ConnectScreen(
+                    api = api,
+                    cameraPermissionGranted = cameraPermissionGranted,
+                    onRequestPermissions = onRequestPermissions,
+                    onConnected = { url, config ->
+                        store.connect(url, config)
+                        // Next gentle step: offer sign-in, which can be skipped.
+                        stack = stack.dropLast(1) + Route.Login
+                    },
+                    onLater = { pop() },
+                )
+
+                Route.Login -> LoginScreen(
+                    settings = settings,
+                    api = api,
+                    notice = strings.sessionExpired.takeIf { settings.sessionExpired },
+                    onSignedIn = { token, user ->
+                        store.signedIn(token, user)
+                        pop()
+                    },
+                    onChangeServer = { stack = stack.dropLast(1) + Route.Connect },
+                    onSkip = { pop() },
+                )
             }
         }
     }
@@ -131,12 +156,14 @@ fun App(cameraPermissionGranted: Boolean, onRequestPermissions: () -> Unit) {
 private fun PermissionPrompt(onRequest: () -> Unit) {
     val strings = LocalStrings.current
     Column(
-        Modifier.fillMaxSize().padding(32.dp),
+        Modifier.fillMaxSize().background(Color(0xFF0E1116)).padding(32.dp),
         verticalArrangement = Arrangement.Center,
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
-        Text(strings.permissionRationale, textAlign = TextAlign.Center)
+        Icon(AppIcons.Pin, null, tint = Color.White, modifier = Modifier.size(36.dp))
         Spacer(Modifier.height(16.dp))
-        Button(onClick = onRequest) { Text(strings.grantPermission) }
+        Text(strings.permissionRationale, textAlign = TextAlign.Center, color = Color.White)
+        Spacer(Modifier.height(20.dp))
+        Button(onClick = onRequest, shape = RoundedCornerShape(14.dp)) { Text(strings.grantPermission) }
     }
 }

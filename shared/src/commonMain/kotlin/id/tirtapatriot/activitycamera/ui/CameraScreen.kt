@@ -1,5 +1,14 @@
 package id.tirtapatriot.activitycamera.ui
 
+import androidx.compose.animation.AnimatedVisibility
+import androidx.compose.animation.core.Animatable
+import androidx.compose.animation.core.tween
+import androidx.compose.animation.fadeIn
+import androidx.compose.animation.fadeOut
+import androidx.compose.animation.scaleIn
+import androidx.compose.animation.scaleOut
+import androidx.compose.foundation.Canvas
+import androidx.compose.foundation.Image
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
@@ -8,24 +17,27 @@ import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
 import androidx.compose.foundation.layout.Spacer
+import androidx.compose.foundation.layout.aspectRatio
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
+import androidx.compose.foundation.layout.height
+import androidx.compose.foundation.layout.navigationBarsPadding
+import androidx.compose.foundation.layout.offset
 import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.layout.safeDrawingPadding
 import androidx.compose.foundation.layout.size
-import androidx.compose.foundation.layout.width
+import androidx.compose.foundation.layout.statusBarsPadding
+import androidx.compose.foundation.layout.widthIn
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
-import androidx.compose.material3.FilterChip
-import androidx.compose.material3.OutlinedTextField
-import androidx.compose.material3.OutlinedTextFieldDefaults
+import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
-import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
+import androidx.compose.runtime.mutableFloatStateOf
+import androidx.compose.runtime.mutableIntStateOf
 import androidx.compose.runtime.mutableLongStateOf
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -33,20 +45,30 @@ import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.draw.clip
+import androidx.compose.ui.graphics.Brush
 import androidx.compose.ui.graphics.Color
+import androidx.compose.ui.graphics.graphicsLayer
+import androidx.compose.ui.graphics.toArgb
+import androidx.compose.ui.graphics.vector.ImageVector
+import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.text.font.FontWeight
+import androidx.compose.ui.text.style.TextOverflow
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import id.tirtapatriot.activitycamera.AppGraph
 import id.tirtapatriot.activitycamera.camera.CameraController
 import id.tirtapatriot.activitycamera.camera.CameraPreview
-import id.tirtapatriot.activitycamera.camera.Stamp
-import id.tirtapatriot.activitycamera.camera.StampFormatter
+import id.tirtapatriot.activitycamera.camera.FlashMode
+import id.tirtapatriot.activitycamera.camera.RawPhoto
+import id.tirtapatriot.activitycamera.camera.WatermarkFormatter
+import id.tirtapatriot.activitycamera.camera.WatermarkPrefs
 import id.tirtapatriot.activitycamera.data.AppSettings
 import id.tirtapatriot.activitycamera.data.CaptureRecord
-import id.tirtapatriot.activitycamera.data.CaptureRepository
 import id.tirtapatriot.activitycamera.i18n.LocalStrings
 import id.tirtapatriot.activitycamera.location.GeoFix
 import id.tirtapatriot.activitycamera.location.LocationProvider
+import id.tirtapatriot.activitycamera.media.rememberThumbnail
 import id.tirtapatriot.activitycamera.model.CaptureMetadata
 import id.tirtapatriot.activitycamera.model.MediaType
 import id.tirtapatriot.activitycamera.platform.PlatformInfo
@@ -54,41 +76,55 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
+import kotlin.math.roundToLong
 
-private const val MAX_NOTE_INPUT = 120
+private enum class CameraSheet { NONE, TASKS, WATERMARK }
 
+private val TimerOptions = listOf(0, 3, 10)
+
+/** The first screen: full camera with floating glass controls. Works without a server or an account. */
 @Composable
 fun CameraScreen(
-    repository: CaptureRepository,
     settings: AppSettings,
     locationProvider: LocationProvider,
-    onOpenGallery: () -> Unit,
-    onOpenSettings: () -> Unit,
+    onOpenReview: (clientId: String) -> Unit,
+    onOpenHistory: () -> Unit,
+    onOpenAccount: () -> Unit,
 ) {
     val strings = LocalStrings.current
     val scope = rememberCoroutineScope()
+    val store = AppGraph.settingsStore
+    val repository = AppGraph.repository
     val timeZone = remember { TimeZone.currentSystemDefault() }
     val fix by locationProvider.fix.collectAsState()
+    val captures by repository.items.collectAsState()
 
-    // Rules and identity managed on the server (admin panel)
     val policy = settings.config.capture
     val branding = settings.config.branding
-    val user = settings.user
-    val officerLabel = user?.let { account -> account.userCode?.let { "${account.displayName} ($it)" } ?: account.displayName }
+    val tasks = settings.config.tasks
+    val task = settings.selectedTask
+    val accent = brandColor(branding.primaryColor)
     val allowedModes = buildList {
-        if (policy.allowPhoto) add(MediaType.PHOTO)
         if (policy.allowVideo) add(MediaType.VIDEO)
+        if (policy.allowPhoto) add(MediaType.PHOTO)
     }.ifEmpty { listOf(MediaType.PHOTO) }
 
     var controller by remember { mutableStateOf<CameraController?>(null) }
-    var mode by remember { mutableStateOf(allowedModes.first()) }
-    var note by remember { mutableStateOf("") }
-    var isBusy by remember { mutableStateOf(false) }
-    var toastMessage by remember { mutableStateOf<String?>(null) }
+    var mode by remember { mutableStateOf(if (MediaType.PHOTO in allowedModes) MediaType.PHOTO else allowedModes.first()) }
+    var flash by remember { mutableStateOf(FlashMode.OFF) }
+    var showGrid by remember { mutableStateOf(false) }
+    var timerSeconds by remember { mutableIntStateOf(0) }
+    var countdown by remember { mutableStateOf<Int?>(null) }
+    var zoom by remember { mutableFloatStateOf(1f) }
+    var isCapturing by remember { mutableStateOf(false) }
+    var sheet by remember { mutableStateOf(CameraSheet.NONE) }
+    var toast by remember { mutableStateOf<String?>(null) }
     var now by remember { mutableLongStateOf(currentEpochMs()) }
-
-    // Video currently being recorded: metadata is taken when recording starts.
+    var justCaptured by remember { mutableStateOf<String?>(null) }
+    // Drag position while moving the watermark; saved when the finger lifts.
+    var dragAnchor by remember { mutableStateOf<Pair<Float, Float>?>(null) }
     var pendingVideo by remember { mutableStateOf<CaptureRecord?>(null) }
+    val shutterFlash = remember { Animatable(0f) }
 
     DisposableEffect(locationProvider) {
         locationProvider.start()
@@ -101,17 +137,39 @@ fun CameraScreen(
         }
     }
     LaunchedEffect(allowedModes) {
-        if (mode !in allowedModes && pendingVideo == null) mode = allowedModes.first()
+        if (mode !in allowedModes && pendingVideo == null) mode = allowedModes.last()
     }
-    LaunchedEffect(toastMessage) {
-        if (toastMessage != null) {
+    LaunchedEffect(toast) {
+        if (toast != null) {
             delay(2_500)
-            toastMessage = null
+            toast = null
+        }
+    }
+    LaunchedEffect(justCaptured) {
+        if (justCaptured != null) {
+            delay(5_000)
+            justCaptured = null
         }
     }
 
+    val prefs = settings.watermark.let { saved ->
+        dragAnchor?.let { (x, y) -> saved.copy(anchorX = x, anchorY = y) } ?: saved
+    }
+
+    fun buildSpec(prefs: WatermarkPrefs, epochMs: Long, geo: GeoFix?) = WatermarkFormatter.build(
+        prefs = prefs,
+        epochMs = epochMs,
+        timeZone = timeZone,
+        fix = geo,
+        organization = branding.organizationName.takeIf { settings.isConnected },
+        taskName = task?.name,
+        officer = settings.officerLabel,
+        accentArgb = accent.toArgb().toLong() and 0xFFFFFFFFL,
+        strings = strings,
+    )
+
     fun buildRecord(type: MediaType, takenAt: Long, geo: GeoFix?): CaptureRecord {
-        val clientId = StampFormatter.newClientId()
+        val clientId = WatermarkFormatter.newClientId()
         val metadata = CaptureMetadata(
             clientId = clientId,
             mediaType = type,
@@ -121,79 +179,120 @@ fun CameraScreen(
             longitude = geo?.longitude,
             accuracyMeters = geo?.accuracyMeters,
             altitudeMeters = geo?.altitude,
-            note = note.trim().ifEmpty { null },
-            userCode = user?.userCode,
+            isMockLocation = geo?.isMock == true,
+            note = settings.watermark.note.trim().ifEmpty { null },
+            taskId = task?.id,
+            taskName = task?.name,
+            userCode = settings.user?.userCode,
+            deviceId = settings.deviceId,
             deviceModel = PlatformInfo.deviceModel,
             platform = PlatformInfo.name,
         )
         return CaptureRecord(
             meta = metadata,
-            fileName = StampFormatter.fileName(type, takenAt, timeZone, clientId, PlatformInfo.videoExtension),
+            fileName = WatermarkFormatter.fileName(type, takenAt, timeZone, clientId, PlatformInfo.videoExtension),
         )
     }
 
-    fun stampLinesAt(epochMs: Long, geo: GeoFix?) = StampFormatter.lines(
-        epochMs = epochMs,
-        timeZone = timeZone,
-        fix = geo,
-        note = note,
-        strings = strings,
-        organization = branding.organizationName.takeIf { policy.stampShowOrganization },
-        officer = officerLabel.takeIf { policy.stampShowOfficer },
-        showCoordinates = policy.stampShowCoordinates,
-    )
-
     /** Why a new capture may not start yet, per the server's rules; null when allowed. */
     fun blockReason(): String? = when {
+        policy.requireTask && task == null && tasks.isNotEmpty() -> {
+            sheet = CameraSheet.TASKS
+            strings.taskRequired
+        }
         policy.requireLocation && fix == null -> strings.locationRequired
-        policy.requireNote && note.isBlank() -> strings.noteRequired
         else -> null
     }
 
-    fun onShutter() {
-        val camera = controller ?: return
-        if (isBusy) return
-        val isStarting = mode == MediaType.PHOTO || pendingVideo == null
-        if (isStarting) {
-            blockReason()?.let {
-                toastMessage = it
-                return
+    /** Saving runs in the app scope so it finishes even if the officer leaves the camera right away. */
+    fun savePhoto(raw: RawPhoto, record: CaptureRecord, geo: GeoFix?, takenAt: Long) {
+        val spec = buildSpec(settings.watermark, takenAt, geo)
+        AppGraph.appScope.launch {
+            val saved = raw.saveWithWatermark(repository.filePath(record), spec, geo)
+            if (saved) {
+                repository.add(record)
+                justCaptured = record.clientId
+                AppGraph.requestSync()
+            } else {
+                toast = strings.photoFailed
             }
         }
-        scope.launch {
-            isBusy = true
-            try {
-                when (mode) {
-                    MediaType.PHOTO -> {
-                        val takenAt = currentEpochMs()
-                        val geo = fix
-                        val record = buildRecord(MediaType.PHOTO, takenAt, geo)
-                        val stamp = Stamp(stampLinesAt(takenAt, geo), geo)
-                        val saved = camera.takePhoto(repository.filePath(record.fileName), stamp)
-                        if (saved) repository.add(record)
-                        toastMessage = if (saved) strings.photoSaved else strings.photoFailed
-                    }
+    }
 
-                    MediaType.VIDEO -> {
-                        val activeVideo = pendingVideo
-                        if (activeVideo == null) {
-                            val record = buildRecord(MediaType.VIDEO, currentEpochMs(), fix)
-                            if (camera.startRecording(repository.filePath(record.fileName), policy.recordAudio)) {
-                                pendingVideo = record
-                            } else {
-                                toastMessage = strings.recordingStartFailed
-                            }
+    fun takeNow() {
+        val camera = controller ?: return
+        scope.launch {
+            when (mode) {
+                MediaType.PHOTO -> {
+                    isCapturing = true
+                    val takenAt = currentEpochMs()
+                    val geo = fix
+                    val raw = try {
+                        camera.capture(flash)
+                    } finally {
+                        isCapturing = false
+                    }
+                    if (raw == null) {
+                        toast = strings.photoFailed
+                        return@launch
+                    }
+                    launch {
+                        shutterFlash.snapTo(0.7f)
+                        shutterFlash.animateTo(0f, tween(220))
+                    }
+                    savePhoto(raw, buildRecord(MediaType.PHOTO, takenAt, geo), geo, takenAt)
+                }
+
+                MediaType.VIDEO -> {
+                    val active = pendingVideo
+                    if (active == null) {
+                        val record = buildRecord(MediaType.VIDEO, currentEpochMs(), fix)
+                        if (camera.startRecording(repository.filePath(record), policy.recordAudio, flash)) {
+                            pendingVideo = record
                         } else {
-                            val saved = camera.stopRecording()
-                            pendingVideo = null
-                            if (saved) repository.add(activeVideo)
-                            toastMessage = if (saved) strings.videoSaved else strings.videoFailed
+                            toast = strings.recordingStartFailed
+                        }
+                    } else {
+                        isCapturing = true
+                        val saved = try {
+                            camera.stopRecording()
+                        } finally {
+                            isCapturing = false
+                        }
+                        pendingVideo = null
+                        if (saved) {
+                            repository.add(active)
+                            justCaptured = active.clientId
+                            AppGraph.requestSync()
+                        } else {
+                            toast = strings.videoFailed
                         }
                     }
                 }
-            } finally {
-                isBusy = false
             }
+        }
+    }
+
+    fun onShutter() {
+        if (controller == null || isCapturing || countdown != null) return
+        val isStarting = mode == MediaType.PHOTO || pendingVideo == null
+        if (isStarting) {
+            blockReason()?.let {
+                toast = it
+                return
+            }
+        }
+        if (isStarting && timerSeconds > 0) {
+            scope.launch {
+                for (second in timerSeconds downTo 1) {
+                    countdown = second
+                    delay(1_000)
+                }
+                countdown = null
+                takeNow()
+            }
+        } else {
+            takeNow()
         }
     }
 
@@ -201,118 +300,367 @@ fun CameraScreen(
     LaunchedEffect(pendingVideo) {
         if (pendingVideo == null) return@LaunchedEffect
         delay(policy.maxVideoSeconds * 1_000L)
-        if (pendingVideo != null) onShutter()
+        if (pendingVideo != null) takeNow()
     }
 
     val isRecording = pendingVideo != null
-    val stampLines = stampLinesAt(now, fix)
     val recordingSeconds = pendingVideo?.let { ((now - it.meta.takenAtEpochMs) / 1_000).coerceAtLeast(0) }
+    val latest = captures.firstOrNull()
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
-        CameraPreview(Modifier.fillMaxSize()) { controller = it }
-
-        // Top: mode switch + activity note
-        Column(
-            Modifier.align(Alignment.TopCenter).fillMaxWidth().safeDrawingPadding().padding(12.dp),
-            verticalArrangement = Arrangement.spacedBy(8.dp),
-        ) {
-            Row(verticalAlignment = Alignment.CenterVertically) {
-                allowedModes.forEach { option ->
-                    FilterChip(
-                        selected = mode == option,
-                        onClick = { if (!isRecording) mode = option },
-                        label = { Text(if (option == MediaType.PHOTO) strings.modePhoto else strings.modeVideo) },
-                    )
-                    Spacer(Modifier.width(8.dp))
-                }
-                recordingSeconds?.let { seconds ->
-                    Text(
-                        "● ${formatDuration(seconds)} / ${formatDuration(policy.maxVideoSeconds.toLong())}",
-                        color = Color.Red,
-                        fontWeight = FontWeight.SemiBold,
+        Column(Modifier.fillMaxSize()) {
+            Spacer(Modifier.statusBarsPadding().height(56.dp))
+            // 3:4 viewfinder = exactly the photo frame, so the watermark lands where it is shown.
+            Box(Modifier.fillMaxWidth().aspectRatio(3f / 4f).clip(RoundedCornerShape(4.dp))) {
+                CameraPreview(Modifier.fillMaxSize()) { controller = it }
+                if (showGrid) GridLines(Modifier.fillMaxSize())
+                if (mode == MediaType.PHOTO) {
+                    WatermarkOverlay(
+                        spec = buildSpec(prefs, now, fix),
+                        modifier = Modifier.fillMaxSize(),
+                        onMove = { x, y -> dragAnchor = x to y },
+                        onMoveEnd = {
+                            dragAnchor?.let { (x, y) ->
+                                store.update { it.copy(watermark = it.watermark.copy(anchorX = x, anchorY = y)) }
+                            }
+                            dragAnchor = null
+                        },
                     )
                 }
-                Spacer(Modifier.weight(1f))
-                TextButton(onClick = onOpenSettings, enabled = !isRecording) { Text(strings.settings) }
+                Box(Modifier.fillMaxSize().graphicsLayer { alpha = shutterFlash.value }.background(Color.White))
+                countdown?.let {
+                    Text("$it", color = Color.White, fontSize = 96.sp, fontWeight = FontWeight.Light, modifier = Modifier.align(Alignment.Center))
+                }
             }
-            OutlinedTextField(
-                value = note,
-                onValueChange = { note = it.take(MAX_NOTE_INPUT) },
+        }
+
+        // Top bar
+        Row(
+            Modifier.align(Alignment.TopCenter).fillMaxWidth().statusBarsPadding().padding(horizontal = 14.dp, vertical = 8.dp),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.spacedBy(8.dp),
+        ) {
+            Box {
+                GlassIconButton(AppIcons.User, strings.account, onClick = onOpenAccount, enabled = !isRecording)
+                if (settings.isConnected && !settings.isSignedIn) {
+                    Box(Modifier.align(Alignment.TopEnd).size(10.dp).background(Color(0xFFFFB300), CircleShape).border(1.5.dp, Color.Black, CircleShape))
+                }
+            }
+            if (recordingSeconds != null) {
+                Row(
+                    Modifier.glass(RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 8.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Box(Modifier.size(8.dp).background(Palette.Record, CircleShape))
+                    Spacer(Modifier.size(8.dp))
+                    Text(
+                        "${formatDuration(recordingSeconds)} / ${formatDuration(policy.maxVideoSeconds.toLong())}",
+                        color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                    )
+                }
+            } else {
+                GpsPill(fix)
+            }
+            Spacer(Modifier.weight(1f))
+            GlassIconButton(
+                if (flash == FlashMode.OFF) AppIcons.FlashOff else AppIcons.Flash,
+                strings.flash,
+                badge = if (flash == FlashMode.AUTO) "A" else null,
+                onClick = { flash = FlashMode.entries[(flash.ordinal + 1) % FlashMode.entries.size] },
+            )
+            GlassIconButton(AppIcons.Grid, strings.grid, active = showGrid, onClick = { showGrid = !showGrid })
+            GlassIconButton(
+                AppIcons.Timer, strings.timer,
+                badge = timerSeconds.takeIf { it > 0 }?.let { "$it" },
                 enabled = !isRecording,
-                singleLine = true,
-                placeholder = { Text(strings.notePlaceholder) },
-                modifier = Modifier.fillMaxWidth(),
-                colors = OutlinedTextFieldDefaults.colors(
-                    focusedContainerColor = Color.Black.copy(alpha = 0.4f),
-                    unfocusedContainerColor = Color.Black.copy(alpha = 0.4f),
-                    disabledContainerColor = Color.Black.copy(alpha = 0.4f),
-                ),
+                onClick = { timerSeconds = TimerOptions[(TimerOptions.indexOf(timerSeconds) + 1) % TimerOptions.size] },
             )
         }
 
-        // Stamp preview, identical to what gets burned into the photo
-        Column(
-            Modifier
-                .align(Alignment.BottomStart)
-                .safeDrawingPadding()
-                .padding(start = 12.dp, end = 12.dp, bottom = 120.dp)
-                .background(Color.Black.copy(alpha = 0.45f), RoundedCornerShape(8.dp))
-                .padding(horizontal = 10.dp, vertical = 6.dp),
-        ) {
-            stampLines.forEach { Text(it, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold) }
-        }
-
-        toastMessage?.let {
+        toast?.let {
             Text(
                 it,
                 color = Color.White,
-                modifier = Modifier
-                    .align(Alignment.Center)
-                    .background(Color.Black.copy(alpha = 0.6f), RoundedCornerShape(8.dp))
-                    .padding(12.dp),
+                fontSize = 14.sp,
+                modifier = Modifier.align(Alignment.Center).glass(RoundedCornerShape(14.dp), strength = 1.6f).padding(horizontal = 16.dp, vertical = 10.dp),
             )
         }
 
-        // Bottom: gallery + shutter
-        Row(
-            Modifier.align(Alignment.BottomCenter).fillMaxWidth().safeDrawingPadding().padding(20.dp),
-            verticalAlignment = Alignment.CenterVertically,
+        // Bottom controls
+        Column(
+            Modifier
+                .align(Alignment.BottomCenter)
+                .fillMaxWidth()
+                .background(Brush.verticalGradient(listOf(Color.Transparent, Color.Black.copy(alpha = 0.35f))))
+                .navigationBarsPadding()
+                .padding(bottom = 14.dp),
+            horizontalAlignment = Alignment.CenterHorizontally,
         ) {
-            TextButton(onClick = onOpenGallery, enabled = !isRecording) { Text(strings.gallery) }
-            Spacer(Modifier.weight(1f))
-            ShutterButton(
-                mode = mode,
-                isRecording = isRecording,
-                enabled = controller != null && !isBusy,
-                onClick = ::onShutter,
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 14.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.spacedBy(8.dp),
+            ) {
+                Box(Modifier.weight(1f)) {
+                    TaskPill(
+                        taskName = task?.name,
+                        icon = task?.let { AppIcons.task(it.icon) } ?: AppIcons.Task,
+                        hint = if (policy.requireTask) strings.pickTaskRequired else strings.pickTaskOptional,
+                        enabled = !isRecording,
+                        onClick = { sheet = CameraSheet.TASKS },
+                    )
+                }
+                ZoomPill(zoom) { ratio ->
+                    zoom = ratio
+                    controller?.setZoom(ratio)
+                }
+                if (mode == MediaType.PHOTO) {
+                    GlassIconButton(AppIcons.Stamp, strings.watermark, enabled = !isRecording, onClick = { sheet = CameraSheet.WATERMARK })
+                }
+            }
+            Spacer(Modifier.height(12.dp))
+            if (allowedModes.size > 1) {
+                Row(horizontalArrangement = Arrangement.spacedBy(22.dp)) {
+                    allowedModes.forEach { option ->
+                        val selected = option == mode
+                        Text(
+                            if (option == MediaType.PHOTO) strings.modePhoto.uppercase() else strings.modeVideo.uppercase(),
+                            color = if (selected) Color(0xFFFFD54F) else Color.White.copy(alpha = 0.7f),
+                            fontSize = 13.sp,
+                            fontWeight = if (selected) FontWeight.Bold else FontWeight.Medium,
+                            letterSpacing = 1.2.sp,
+                            modifier = Modifier.clickable(enabled = !isRecording) { mode = option }.padding(6.dp),
+                        )
+                    }
+                }
+                Spacer(Modifier.height(8.dp))
+            }
+            Row(
+                Modifier.fillMaxWidth().padding(horizontal = 28.dp),
+                verticalAlignment = Alignment.CenterVertically,
+            ) {
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
+                    LatestThumb(latest, enabled = !isRecording, onClick = onOpenHistory)
+                    AnimatedVisibility(
+                        visible = justCaptured != null && !isRecording,
+                        enter = fadeIn() + scaleIn(initialScale = 0.8f),
+                        exit = fadeOut() + scaleOut(targetScale = 0.8f),
+                        modifier = Modifier.offset(x = 64.dp),
+                    ) {
+                        Row(
+                            Modifier
+                                .glass(RoundedCornerShape(50), strength = 1.4f)
+                                .clickable { justCaptured?.let(onOpenReview); justCaptured = null }
+                                .padding(horizontal = 12.dp, vertical = 8.dp),
+                            verticalAlignment = Alignment.CenterVertically,
+                        ) {
+                            Icon(AppIcons.Share, null, tint = Color.White, modifier = Modifier.size(16.dp))
+                            Spacer(Modifier.size(6.dp))
+                            Text(strings.share, color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+                        }
+                    }
+                }
+                ShutterButton(
+                    mode = mode,
+                    isRecording = isRecording,
+                    enabled = controller != null && !isCapturing,
+                    onClick = ::onShutter,
+                )
+                Box(Modifier.weight(1f), contentAlignment = Alignment.CenterEnd) {
+                    GlassIconButton(AppIcons.Flip, strings.flipCamera, size = 52, enabled = !isRecording) {
+                        controller?.switchCamera()
+                        zoom = 1f
+                    }
+                }
+            }
+        }
+
+        // Sheets float over the camera, which keeps running underneath.
+        if (sheet != CameraSheet.NONE) {
+            Box(Modifier.fillMaxSize().background(Color.Black.copy(alpha = 0.25f)).clickable(interactionSource = null, indication = null) { sheet = CameraSheet.NONE })
+        }
+        AnimatedVisibility(
+            visible = sheet == CameraSheet.TASKS,
+            enter = sheetEnter(), exit = sheetExit(),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            TaskSheet(
+                settings = settings,
+                onPick = { picked ->
+                    store.update { it.copy(selectedTaskId = picked?.id) }
+                    sheet = CameraSheet.NONE
+                },
+                onOpenAccount = {
+                    sheet = CameraSheet.NONE
+                    onOpenAccount()
+                },
+                onClose = { sheet = CameraSheet.NONE },
             )
-            Spacer(Modifier.weight(1f))
-            Spacer(Modifier.width(72.dp))
+        }
+        AnimatedVisibility(
+            visible = sheet == CameraSheet.WATERMARK,
+            enter = sheetEnter(), exit = sheetExit(),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            WatermarkSheet(
+                prefs = settings.watermark,
+                previewSpec = { buildSpec(it, now, fix) },
+                onChange = { changed -> store.update { it.copy(watermark = changed) } },
+                onClose = { sheet = CameraSheet.NONE },
+            )
+        }
+    }
+}
+
+@Composable
+fun GlassIconButton(
+    icon: ImageVector,
+    contentDescription: String,
+    size: Int = 40,
+    active: Boolean = false,
+    badge: String? = null,
+    enabled: Boolean = true,
+    onClick: () -> Unit,
+) {
+    Box(
+        Modifier
+            .size(size.dp)
+            .glass(CircleShape, strength = if (active) 2f else 1f)
+            .clickable(enabled = enabled, onClick = onClick)
+            .graphicsLayer { alpha = if (enabled) 1f else 0.45f },
+        contentAlignment = Alignment.Center,
+    ) {
+        Icon(icon, contentDescription, tint = if (active) Color(0xFFFFD54F) else Color.White, modifier = Modifier.size((size * 0.48f).dp))
+        badge?.let {
+            Text(
+                it,
+                color = Color.Black,
+                fontSize = 9.sp,
+                fontWeight = FontWeight.Bold,
+                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp)
+                    .background(Color(0xFFFFD54F), CircleShape).padding(horizontal = 4.dp),
+            )
+        }
+    }
+}
+
+@Composable
+private fun GpsPill(fix: GeoFix?) {
+    val strings = LocalStrings.current
+    val (label, color) = when {
+        fix == null -> strings.gpsSearching to Color.White.copy(alpha = 0.85f)
+        fix.isMock -> strings.mockLocation to Color(0xFFFFB300)
+        else -> (fix.accuracyMeters?.let { "±${it.roundToLong()} m" } ?: "GPS") to Color.White
+    }
+    Row(
+        Modifier.glass(RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(if (fix?.isMock == true) AppIcons.Alert else AppIcons.Pin, null, tint = color, modifier = Modifier.size(15.dp))
+        Spacer(Modifier.size(6.dp))
+        Text(label, color = color, fontSize = 12.sp, fontWeight = FontWeight.SemiBold, maxLines = 1)
+    }
+}
+
+@Composable
+private fun TaskPill(taskName: String?, icon: ImageVector, hint: String, enabled: Boolean, onClick: () -> Unit) {
+    Row(
+        Modifier
+            .widthIn(max = 220.dp)
+            .glass(RoundedCornerShape(50))
+            .clickable(enabled = enabled, onClick = onClick)
+            .padding(start = 10.dp, end = 14.dp, top = 9.dp, bottom = 9.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Icon(icon, null, tint = Color.White, modifier = Modifier.size(17.dp))
+        Spacer(Modifier.size(8.dp))
+        Text(
+            taskName ?: hint,
+            color = if (taskName != null) Color.White else Color.White.copy(alpha = 0.8f),
+            fontSize = 13.sp,
+            fontWeight = if (taskName != null) FontWeight.SemiBold else FontWeight.Medium,
+            maxLines = 1,
+            overflow = TextOverflow.Ellipsis,
+        )
+    }
+}
+
+@Composable
+private fun ZoomPill(zoom: Float, onZoom: (Float) -> Unit) {
+    Row(Modifier.glass(RoundedCornerShape(50)).padding(3.dp), horizontalArrangement = Arrangement.spacedBy(2.dp)) {
+        listOf(1f, 2f).forEach { ratio ->
+            val selected = zoom == ratio
+            Box(
+                Modifier
+                    .size(34.dp)
+                    .background(if (selected) Color.Black.copy(alpha = 0.35f) else Color.Transparent, CircleShape)
+                    .clickable { onZoom(ratio) },
+                contentAlignment = Alignment.Center,
+            ) {
+                Text(
+                    "${ratio.toInt()}×",
+                    color = if (selected) Color(0xFFFFD54F) else Color.White,
+                    fontSize = 12.sp,
+                    fontWeight = FontWeight.Bold,
+                )
+            }
+        }
+    }
+}
+
+@Composable
+private fun LatestThumb(latest: CaptureRecord?, enabled: Boolean, onClick: () -> Unit) {
+    val shape = RoundedCornerShape(14.dp)
+    Box(
+        Modifier
+            .size(52.dp)
+            .glass(shape)
+            .border(2.dp, Color.White.copy(alpha = 0.85f), shape)
+            .clickable(enabled = enabled, onClick = onClick),
+        contentAlignment = Alignment.Center,
+    ) {
+        if (latest == null) {
+            Icon(AppIcons.Images, null, tint = Color.White, modifier = Modifier.size(22.dp))
+        } else {
+            val path = AppGraph.repository.filePath(latest)
+            val bitmap by rememberThumbnail(path, latest.meta.mediaType == MediaType.VIDEO, 160)
+            bitmap?.let { Image(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(shape)) }
+                ?: Icon(if (latest.meta.mediaType == MediaType.VIDEO) AppIcons.Video else AppIcons.Images, null, tint = Color.White, modifier = Modifier.size(22.dp))
         }
     }
 }
 
 @Composable
 private fun ShutterButton(mode: MediaType, isRecording: Boolean, enabled: Boolean, onClick: () -> Unit) {
-    val innerColor = when {
-        isRecording -> Color.Red
-        mode == MediaType.VIDEO -> Color(0xFFE53935)
+    val inner = when {
+        isRecording -> Palette.Record
+        mode == MediaType.VIDEO -> Palette.Record
         else -> Color.White
     }
     Box(
         Modifier
-            .size(76.dp)
+            .size(78.dp)
             .border(4.dp, Color.White, CircleShape)
-            .padding(8.dp)
-            .background(
-                if (enabled) innerColor else innerColor.copy(alpha = 0.4f),
-                if (isRecording) RoundedCornerShape(8.dp) else CircleShape,
-            )
+            .padding(if (isRecording) 22.dp else 7.dp)
+            .background(if (enabled) inner else inner.copy(alpha = 0.5f), if (isRecording) RoundedCornerShape(6.dp) else CircleShape)
             .clickable(enabled = enabled, onClick = onClick),
     )
 }
 
-private fun currentEpochMs(): Long = Clock.System.now().toEpochMilliseconds()
+@Composable
+private fun GridLines(modifier: Modifier) {
+    Canvas(modifier) {
+        val color = Color.White.copy(alpha = 0.3f)
+        for (i in 1..2) {
+            val x = size.width * i / 3f
+            val y = size.height * i / 3f
+            drawLine(color, androidx.compose.ui.geometry.Offset(x, 0f), androidx.compose.ui.geometry.Offset(x, size.height), 1.dp.toPx())
+            drawLine(color, androidx.compose.ui.geometry.Offset(0f, y), androidx.compose.ui.geometry.Offset(size.width, y), 1.dp.toPx())
+        }
+    }
+}
 
-private fun formatDuration(totalSeconds: Long): String =
+internal fun currentEpochMs(): Long = Clock.System.now().toEpochMilliseconds()
+
+internal fun formatDuration(totalSeconds: Long): String =
     "${totalSeconds / 60}:${(totalSeconds % 60).toString().padStart(2, '0')}"

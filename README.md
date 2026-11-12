@@ -2,10 +2,10 @@
 
 Open-source camera app for documenting field activities, with a self-hosted server.
 
-- **App** (Android & iOS, Kotlin Multiplatform + Compose Multiplatform): photos and videos stamped with date-time, GPS coordinates, an activity note, the organization and the officer. Captures are stored on the phone and synced later.
-- **Server** (Ktor): receives uploads, stores files on disk/NAS and metadata in SQL Server, and hosts an **admin panel** where each organization manages its own branding, capture rules and officer accounts.
+- **App** (Android & iOS, Kotlin Multiplatform + Compose Multiplatform): opens straight into the camera. Photos get a watermark the officer arranges (card, strip or minimal; drag to move) with date-time, GPS, task, officer and note. The main action after a shot is **Share** through the system share sheet (WhatsApp, Telegram, e-mail…), with a ready-made caption including a Google Maps link — the way field officers already report to supervisors and groups. Every capture is also uploaded in the background to the organization's server.
+- **Server** (Ktor): receives uploads, stores files on disk/NAS and metadata in SQL Server, and hosts an **admin panel** where each organization manages its branding, rules, task types and officer accounts.
 
-One app build serves any organization: on first launch the officer connects the app to their organization's server (scan a QR from the admin panel or type the address), then signs in.
+One app build serves any organization. Connecting to a server and signing in are optional and only suggested: the camera works without them, uploads can be anonymous (recorded per device) when the admin allows it, and the admin can later require sign-in or a task.
 
 UI languages: **Indonesian (default)** and English, in the app and in the admin panel.
 
@@ -16,15 +16,17 @@ Licensed under the [Apache License 2.0](LICENSE).
 ```
  Phone (app)                              Server (Ktor, Docker)                Storage
  ───────────                              ─────────────────────                ───────
- Connect: scan QR / type URL ──GET /api/v1/config──▶ branding + capture rules
- Sign in (officer account)   ──POST /api/v1/auth/login──▶ bearer token
- Capture → saved on phone
- Sync (Gallery)              ──POST /api/v1/captures──▶ file  ───────────────▶ NAS / disk (STORAGE_ROOT)
-                                                        metadata ───────────▶ SQL Server (schema cactivity)
- Admin (browser)             ──/admin──▶ branding, rules, accounts, captures, connect QR
+ Camera (no setup needed) → watermarked photo saved on the phone → Share (system sheet)
+ Connect (optional): QR / URL ──GET /api/v1/config──▶ branding, rules, task types
+ Sign in (optional)           ──POST /api/v1/auth/login──▶ bearer token
+ Background upload            ──POST /api/v1/captures──▶ file  ──────────────▶ NAS / disk (STORAGE_ROOT)
+   (WorkManager / iOS)                                  metadata ──────────▶ SQL Server (schema cactivity)
+ Shared after upload          ──POST /api/v1/captures/{clientId}/shared──▶ shared_at
+ Admin (browser)              ──/admin──▶ captures, officers, tasks, branding, rules, connect QR
 ```
 
-- Branding (organization name, in-app title per language, primary color, logo) and capture rules (photo/video allowed, required GPS, required note, audio, max video length, stamp contents, default language) are edited in the admin panel and picked up by the app on the next start. The last configuration is cached so the app works offline.
+- Branding (organization name, in-app title per language, primary color, logo), task types and rules are edited in the admin panel and picked up by the app on the next start; the last configuration is cached so the app works offline. Rules start permissive on purpose: anonymous uploads allowed, sign-in and task optional. Tighten them once officers are used to the app (*Require sign-in*, *Require a task*, *Require GPS*, photo/video, audio, max video length, default language).
+- Recorded with each capture: device id and model, time taken vs. time uploaded, task, whether the location was reported as **mock** by the OS (allowed but flagged in the panel), and when it was **shared** from the phone.
 - The app's home-screen name and icon are fixed at build time; to change those, build your own app with a different name/icon (see *Rebranding the app build*).
 - Each capture has a UUID generated on the phone, so re-uploads never create duplicates. The officer code stored with a capture always comes from the signed-in account.
 
@@ -48,6 +50,7 @@ Requirements: Docker (or JDK 17+), SQL Server, and a writable folder for files (
 1. Create the database objects by running, in order:
    - `server/sql/001_init.sql`
    - `server/sql/002_accounts_settings.sql`
+   - `server/sql/003_tasks_anonymous.sql`
 2. Configure the environment (see `server/.env.example`):
 
    | Variable | Meaning |
@@ -98,7 +101,8 @@ The in-app branding comes from the server. To publish a build with your own home
 | `POST` | `/api/v1/auth/login` | — | `{username, password, deviceName}` → `{token, user}` |
 | `POST` | `/api/v1/auth/logout` | Bearer | Revokes the token |
 | `GET` | `/api/v1/me` | Bearer | Signed-in account |
-| `POST` | `/api/v1/captures` | Bearer | Multipart upload: `metadata` (JSON) + `file` |
+| `POST` | `/api/v1/captures` | Bearer, or none when anonymous uploads are allowed | Multipart upload: `metadata` (JSON) + `file` |
+| `POST` | `/api/v1/captures/{clientId}/shared` | Same as upload | `{sharedAtEpochMs}` — capture shared after it was uploaded |
 | `GET` | `/api/v1/captures?from=&to=&userId=&limit=` | Bearer (admin) | List metadata |
 | `GET` | `/api/v1/captures/{id}/file` | Bearer (admin) | Download the original file |
 
@@ -122,9 +126,10 @@ To build the apps for a release, push a tag, e.g. `git tag v0.1.0 && git push or
 
 ## Not implemented yet
 
-- Burning the stamp into video frames (the stamp is shown while recording and stored as metadata).
-- Automatic background sync (WorkManager / BGTaskScheduler); sync is started from the Gallery.
-- Thumbnails in the in-app gallery.
+- Burning the watermark into video frames (video metadata is recorded; the watermark applies to photos).
+- GPS in the EXIF of iOS photos (Android writes it; both store it in the capture metadata).
+- iOS uploads run while the app is open (plus a short grace period when it goes to the background); Android uses WorkManager and also uploads after the app is closed.
+- Reverse geocoding (street address) in the watermark; the share caption has a Google Maps link instead.
 
 ## Contributing
 

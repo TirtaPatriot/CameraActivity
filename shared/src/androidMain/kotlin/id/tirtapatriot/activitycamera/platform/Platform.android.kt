@@ -29,3 +29,8 @@ actual fun mediaDirectory(): String {
     val base = context.getExternalFilesDir(Environment.DIRECTORY_PICTURES) ?: context.filesDir
     return File(base, "ActivityCamera").apply { mkdirs() }.absolutePath
 }
+
+@androidx.compose.runtime.Composable
+actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) {
+    androidx.activity.compose.BackHandler(enabled = enabled, onBack = onBack)
+}

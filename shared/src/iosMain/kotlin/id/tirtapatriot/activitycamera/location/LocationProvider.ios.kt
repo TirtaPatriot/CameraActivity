@@ -48,6 +48,8 @@ private class IosLocationProvider : LocationProvider {
                     longitude = longitude,
                     accuracyMeters = location.horizontalAccuracy.takeIf { it >= 0 }?.toFloat(),
                     altitude = location.altitude,
+                    // iOS 15+: set when the location comes from a simulator or a spoofing accessory/tool.
+                    isMock = location.sourceInformation?.isSimulatedBySoftware == true,
                 ),
             )
         }

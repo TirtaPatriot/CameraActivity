@@ -16,3 +16,7 @@ actual fun mediaDirectory(): String {
     val documents = NSSearchPathForDirectoriesInDomains(NSDocumentDirectory, NSUserDomainMask, true).first() as String
     return "$documents/ActivityCamera"
 }
+
+/** iOS has no system back button; screens use their own back/close buttons (swipe-back can come later). */
+@androidx.compose.runtime.Composable
+actual fun PlatformBackHandler(enabled: Boolean, onBack: () -> Unit) = Unit

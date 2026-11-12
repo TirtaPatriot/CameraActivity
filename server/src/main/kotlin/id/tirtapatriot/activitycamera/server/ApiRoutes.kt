@@ -5,6 +5,7 @@ import id.tirtapatriot.activitycamera.model.CaptureMetadata
 import id.tirtapatriot.activitycamera.model.ErrorResponse
 import id.tirtapatriot.activitycamera.model.LoginRequest
 import id.tirtapatriot.activitycamera.model.LoginResponse
+import id.tirtapatriot.activitycamera.model.ShareReport
 import id.tirtapatriot.activitycamera.model.UploadResponse
 import id.tirtapatriot.activitycamera.model.UserRole
 import io.ktor.http.ContentType
@@ -25,6 +26,7 @@ import io.ktor.server.routing.post
 import io.ktor.server.routing.route
 import kotlinx.serialization.json.Json
 import java.io.File
+import java.time.Instant
 import java.time.LocalDate
 
 private const val DEFAULT_LIST_LIMIT = 100
@@ -56,6 +58,26 @@ private suspend fun RoutingContext.requireAdmin(deps: ServerDeps): UserRecord? {
         return null
     }
     return user
+}
+
+/** Who is uploading: a signed-in officer, or an anonymous device (account = null). */
+private class Uploader(val account: UserRecord?)
+
+/** Signed-in officer, or an anonymous device when the admin allows it; responds 401 and returns null otherwise. */
+private suspend fun RoutingContext.uploaderOrNull(deps: ServerDeps): Uploader? {
+    val user = deps.auth.userFromBearer(call)
+    if (user != null) return Uploader(user)
+    // A token that no longer works must not silently turn into an anonymous upload.
+    if (deps.auth.bearerToken(call) != null) {
+        call.respond(HttpStatusCode.Unauthorized, ErrorResponse("Session expired"))
+        return null
+    }
+    val policy = blocking { deps.settings.appConfig().capture }
+    if (policy.requireSignIn || !policy.allowAnonymousUpload) {
+        call.respond(HttpStatusCode.Unauthorized, ErrorResponse("Sign-in required"))
+        return null
+    }
+    return Uploader(null)
 }
 
 /** JSON API used by the mobile app. */
@@ -99,14 +121,7 @@ fun Route.apiRoutes(deps: ServerDeps) {
 
         // Multipart upload: "metadata" (CaptureMetadata JSON) followed by "file".
         post {
-            // Signed-in officer, or an anonymous device when the admin allows it.
-            val user = deps.auth.userFromBearer(call)
-            if (user == null) {
-                val policy = blocking { deps.settings.appConfig().capture }
-                if (policy.requireSignIn || !policy.allowAnonymousUpload) {
-                    return@post call.respond(HttpStatusCode.Unauthorized, ErrorResponse("Sign-in required"))
-                }
-            }
+            val user = uploaderOrNull(deps) ?: return@post
 
             var metadata: CaptureMetadata? = null
             var tempFile: File? = null
@@ -134,7 +149,7 @@ fun Route.apiRoutes(deps: ServerDeps) {
                 }
 
                 // The officer code always comes from the signed-in account, never from the device.
-                val meta = metadata?.copy(userCode = user?.userCode)
+                val meta = metadata?.copy(userCode = user.account?.userCode)
                     ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorResponse("Part 'metadata' is required"))
                 val file = tempFile
                     ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorResponse("Part 'file' is required"))
@@ -152,12 +167,26 @@ fun Route.apiRoutes(deps: ServerDeps) {
                 // Keep the task only when it still exists; its name is stored as shown on the device anyway.
                 val taskTypeId = meta.taskId?.let { blocking { deps.tasks.findActive(it) }?.id }
                 val id = blocking {
-                    deps.captures.insert(meta, user?.id, taskTypeId, relativePath, fileSize, originalName)
+                    deps.captures.insert(meta, user.account?.id, taskTypeId, relativePath, fileSize, originalName)
                 }
                 call.respond(HttpStatusCode.Created, UploadResponse(id, meta.clientId, relativePath, duplicate = false))
             } finally {
                 tempFile?.delete()
             }
+        }
+
+        // The officer shared an already uploaded capture (WhatsApp, group, …).
+        post("{clientId}/shared") {
+            uploaderOrNull(deps) ?: return@post
+            val clientId = call.parameters["clientId"].orEmpty()
+            if (!clientIdPattern.matches(clientId)) {
+                return@post call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid clientId"))
+            }
+            val report = call.receive<ShareReport>()
+            val found = blocking {
+                deps.captures.markShared(clientId, Instant.ofEpochMilli(report.sharedAtEpochMs), deps.config.timeZone)
+            }
+            call.respond(if (found) HttpStatusCode.NoContent else HttpStatusCode.NotFound)
         }
 
         // List (admin): ?from=2026-11-01&to=2026-11-30&userId=3&limit=100

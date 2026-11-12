@@ -8,6 +8,8 @@ data class GeoFix(
     val longitude: Double,
     val accuracyMeters: Float?,
     val altitude: Double?,
+    /** The OS reports this location as coming from a mock/simulated provider. Allowed, but recorded. */
+    val isMock: Boolean = false,
 )
 
 /** GPS location, continuously updated while the camera screen is active. */

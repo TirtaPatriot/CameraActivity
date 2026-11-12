@@ -1,6 +1,9 @@
 package id.tirtapatriot.activitycamera.ui
 
+import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.shape.RoundedCornerShape
+import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
@@ -39,6 +42,7 @@ fun LoginScreen(
     notice: String?,
     onSignedIn: (token: String, user: UserProfile) -> Unit,
     onChangeServer: () -> Unit,
+    onSkip: () -> Unit,
 ) {
     val strings = LocalStrings.current
     val branding = settings.config.branding
@@ -64,8 +68,9 @@ fun LoginScreen(
         }
     }
 
+    val anonymousAllowed = settings.config.capture.allowAnonymousUpload && !settings.config.capture.requireSignIn
     Column(
-        Modifier.fillMaxSize().safeDrawingPadding().padding(24.dp),
+        Modifier.fillMaxSize().background(Palette.Background).safeDrawingPadding().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(14.dp, Alignment.CenterVertically),
         horizontalAlignment = Alignment.CenterHorizontally,
     ) {
@@ -98,11 +103,15 @@ fun LoginScreen(
         Button(
             onClick = ::signIn,
             enabled = !isBusy && username.isNotBlank() && password.isNotEmpty(),
-            modifier = Modifier.fillMaxWidth(),
-        ) { Text(if (isBusy) strings.signingIn else strings.signIn) }
+            shape = RoundedCornerShape(14.dp),
+            modifier = Modifier.fillMaxWidth().height(50.dp),
+        ) { Text(if (isBusy) strings.signingIn else strings.signIn, fontWeight = FontWeight.SemiBold) }
         error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        TextButton(onClick = onSkip, enabled = !isBusy) {
+            Text(if (anonymousAllowed) strings.skipUseWithoutAccount else strings.laterToCamera, fontWeight = FontWeight.SemiBold)
+        }
         TextButton(onClick = onChangeServer, enabled = !isBusy) {
-            Text("${strings.changeServer} · ${settings.serverUrl}")
+            Text("${strings.changeServer} · ${settings.serverUrl}", color = Palette.TextMuted)
         }
     }
 }

@@ -106,6 +106,17 @@ class CaptureDb(private val dataSource: DataSource, private val reportZone: Zone
             }
         }
 
+    /** Records the first time a capture was shared; true when the capture exists. */
+    fun markShared(clientId: String, sharedAt: Instant, zone: ZoneId): Boolean = dataSource.connection.use { connection ->
+        connection.prepareStatement(
+            "UPDATE cactivity.capture SET shared_at = COALESCE(shared_at, ?) WHERE client_id = ?",
+        ).use { statement ->
+            statement.setObject(1, sharedAt.atZone(zone).toOffsetDateTime())
+            statement.setString(2, clientId)
+            statement.executeUpdate() > 0
+        }
+    }
+
     fun storagePathOf(id: Long): String? = dataSource.connection.use { connection ->
         connection.prepareStatement("SELECT storage_path FROM cactivity.capture WHERE id = ?").use { statement ->
             statement.setLong(1, id)

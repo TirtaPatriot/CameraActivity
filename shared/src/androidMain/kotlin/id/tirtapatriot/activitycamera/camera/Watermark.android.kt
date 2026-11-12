@@ -3,21 +3,20 @@ package id.tirtapatriot.activitycamera.camera
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Matrix
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import androidx.exifinterface.media.ExifInterface
+import id.tirtapatriot.activitycamera.location.GeoFix
 import java.io.File
 import java.io.FileOutputStream
-import kotlin.math.min
 
-/** Burns the stamp text into a JPEG and writes GPS into EXIF. */
+/** Burns the watermark into a JPEG (same layout as the live preview) and writes GPS into EXIF. */
 internal object Watermark {
-    private const val JPEG_QUALITY = 92
+    private const val JPEG_QUALITY = 90
 
-    fun burn(source: File, destination: File, stamp: Stamp) {
+    fun burn(source: File, destination: File, spec: WatermarkSpec?, geo: GeoFix?) {
         val rotationDegrees = when (
             ExifInterface(source.absolutePath).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
         ) {
@@ -27,49 +26,60 @@ internal object Watermark {
             else -> 0f
         }
 
-        val decoded = BitmapFactory.decodeFile(source.absolutePath) ?: error("Unable to decode photo")
+        val decoded = BitmapFactory.decodeFile(source.absolutePath, BitmapFactory.Options().apply { inMutable = true })
+            ?: error("Unable to decode photo")
         val upright = if (rotationDegrees != 0f) {
             Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, Matrix().apply { postRotate(rotationDegrees) }, true)
                 .also { if (it !== decoded) decoded.recycle() }
         } else {
             decoded
         }
-        val canvasBitmap = if (upright.isMutable) upright else upright.copy(Bitmap.Config.ARGB_8888, true).also { upright.recycle() }
+        val bitmap = if (upright.isMutable) upright else upright.copy(Bitmap.Config.ARGB_8888, true).also { upright.recycle() }
 
-        drawStamp(Canvas(canvasBitmap), canvasBitmap.width.toFloat(), canvasBitmap.height.toFloat(), stamp.lines)
+        if (spec != null) draw(Canvas(bitmap), bitmap.width.toFloat(), bitmap.height.toFloat(), spec)
 
-        FileOutputStream(destination).use { canvasBitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }
-        canvasBitmap.recycle()
+        FileOutputStream(destination).use { bitmap.compress(Bitmap.CompressFormat.JPEG, JPEG_QUALITY, it) }
+        bitmap.recycle()
 
         ExifInterface(destination.absolutePath).apply {
-            stamp.geo?.let { geo ->
-                setLatLong(geo.latitude, geo.longitude)
-                geo.altitude?.let { setAltitude(it) }
+            geo?.let {
+                setLatLong(it.latitude, it.longitude)
+                it.altitude?.let { altitude -> setAltitude(altitude) }
             }
-            setAttribute(ExifInterface.TAG_IMAGE_DESCRIPTION, stamp.lines.joinToString(" | "))
+            spec?.let { setAttribute(ExifInterface.TAG_IMAGE_DESCRIPTION, it.plainText()) }
             saveAttributes()
         }
     }
 
-    private fun drawStamp(canvas: Canvas, width: Float, height: Float, lines: List<String>) {
-        val textSize = min(width, height) * 0.032f
-        val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
-            color = Color.WHITE
-            this.textSize = textSize
-            typeface = Typeface.DEFAULT_BOLD
-            setShadowLayer(textSize * 0.12f, 1f, 1f, Color.BLACK)
+    private fun draw(canvas: Canvas, width: Float, height: Float, spec: WatermarkSpec) {
+        val regular = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.DEFAULT }
+        val bold = Paint(Paint.ANTI_ALIAS_FLAG).apply { typeface = Typeface.DEFAULT_BOLD }
+        val measure = TextMeasure { text, sizePx, isBold ->
+            val paint = if (isBold) bold else regular
+            paint.textSize = sizePx
+            paint.measureText(text)
         }
-        val padding = textSize * 0.6f
-        val lineHeight = textSize * 1.3f
-        val boxWidth = lines.maxOf { textPaint.measureText(it) } + padding * 2
-        val boxHeight = lineHeight * lines.size + padding * 2
-        val left = padding
-        val top = height - boxHeight - padding
+        val layout = WatermarkLayout.layout(spec, width, height, measure)
+        val fill = Paint(Paint.ANTI_ALIAS_FLAG)
+        layout.ops.forEach { op ->
+            when (op) {
+                is WatermarkOp.Box -> {
+                    fill.color = op.argb.toInt()
+                    canvas.drawRoundRect(RectF(op.left, op.top, op.right, op.bottom), op.radius, op.radius, fill)
+                }
 
-        val backgroundPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply { color = Color.argb(115, 0, 0, 0) }
-        canvas.drawRoundRect(RectF(left, top, left + boxWidth, top + boxHeight), padding, padding, backgroundPaint)
-        lines.forEachIndexed { index, line ->
-            canvas.drawText(line, left + padding, top + padding + textSize + index * lineHeight, textPaint)
+                is WatermarkOp.Text -> {
+                    val paint = Paint(if (op.bold) bold else regular).apply {
+                        textSize = op.sizePx
+                        color = op.argb.toInt()
+                        if (op.shadow) setShadowLayer(op.sizePx * 0.12f, 1f, 1f, 0x99000000.toInt()) else clearShadowLayer()
+                    }
+                    val metrics = paint.fontMetrics
+                    // Center the font's ascent..descent inside the line box.
+                    val baseline = op.top + (op.lineHeight - (metrics.descent - metrics.ascent)) / 2f - metrics.ascent
+                    canvas.drawText(op.text, op.left, baseline, paint)
+                }
+            }
         }
     }
 }

@@ -5,6 +5,7 @@ import android.annotation.SuppressLint
 import android.content.Context
 import android.content.pm.PackageManager
 import android.location.Location
+import android.os.Build
 import android.os.Looper
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.remember
@@ -56,6 +57,7 @@ private fun Location.toGeoFix() = GeoFix(
     longitude = longitude,
     accuracyMeters = if (hasAccuracy()) accuracy else null,
     altitude = if (hasAltitude()) altitude else null,
+    isMock = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S) isMock else @Suppress("DEPRECATION") isFromMockProvider,
 )
 
 @Composable
