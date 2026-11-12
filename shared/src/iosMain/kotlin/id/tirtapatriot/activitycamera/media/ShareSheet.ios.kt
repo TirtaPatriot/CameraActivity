@@ -1,9 +1,8 @@
 package id.tirtapatriot.activitycamera.media
 
 import platform.Foundation.NSURL
-import platform.UIKit.UIActivityViewController
-import platform.UIKit.UIApplication
-import platform.UIKit.UIViewController
+// Star import: popoverPresentationController is a UIKit category property (Kotlin extension).
+import platform.UIKit.*
 
 actual object ShareSheet {
     actual fun share(files: List<ShareFile>, text: String, onShared: () -> Unit) {

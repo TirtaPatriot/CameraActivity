@@ -11,6 +11,7 @@ import platform.CoreGraphics.CGSizeMake
 import platform.Foundation.NSData
 import platform.Foundation.NSString
 import platform.Foundation.create
+import platform.Foundation.writeToFile
 // Star import: NSString drawing/measuring are UIKit category extensions.
 import platform.UIKit.*
 

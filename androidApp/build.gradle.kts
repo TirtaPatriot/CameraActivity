@@ -20,7 +20,8 @@ android {
     // Release key from the environment (CI secrets). Use the same key as the other in-house apps
     // (e.g. attendance) so Android gives them the same ANDROID_ID on a phone.
     // Unset secrets arrive in CI as empty strings, so treat blank as missing.
-    fun env(name: String) = System.getenv(name)?.takeIf { it.isNotBlank() }
+    // Trailing newlines appear when a secret is piped in (e.g. from `glab variable get`).
+    fun env(name: String) = System.getenv(name)?.trimEnd('\n', '\r')?.takeIf { it.isNotBlank() }
     val releaseKeystore = env("ANDROID_KEYSTORE_PATH")?.takeIf { file(it).exists() }
     signingConfigs {
         if (releaseKeystore != null) {

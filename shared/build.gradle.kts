@@ -9,6 +9,9 @@ plugins {
 }
 
 kotlin {
+    // expect/actual objects are Beta in Kotlin; we rely on them for platform code.
+    compilerOptions { freeCompilerArgs.add("-Xexpect-actual-classes") }
+
     androidTarget {
         compilerOptions { jvmTarget.set(JvmTarget.JVM_17) }
     }
