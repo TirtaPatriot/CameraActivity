@@ -10,7 +10,7 @@ import javax.sql.DataSource
  * Server-managed settings in cactivity.setting (key → JSON/text), cached in memory.
  * Edited from the admin panel and served to the apps via GET /api/v1/config.
  */
-class SettingsRepository(private val dataSource: DataSource) {
+class SettingsRepository(private val dataSource: DataSource, private val tasks: TaskDb) {
     private val json = Json {
         ignoreUnknownKeys = true
         encodeDefaults = true
@@ -20,6 +20,11 @@ class SettingsRepository(private val dataSource: DataSource) {
     private var cachedConfig: AppConfig? = null
 
     fun appConfig(): AppConfig = cachedConfig ?: loadConfig().also { cachedConfig = it }
+
+    /** Call after task types change so /api/v1/config serves the new list. */
+    fun invalidate() {
+        cachedConfig = null
+    }
 
     fun saveBranding(branding: Branding) {
         put(KEY_BRANDING, json.encodeToString(Branding.serializer(), branding))
@@ -46,7 +51,7 @@ class SettingsRepository(private val dataSource: DataSource) {
         val capture = get(KEY_CAPTURE)
             ?.let { runCatching { json.decodeFromString(CapturePolicy.serializer(), it) }.getOrNull() }
             ?: CapturePolicy()
-        return AppConfig(branding, capture)
+        return AppConfig(branding, capture, tasks.listActive().map { it.toTaskType() })
     }
 
     private fun get(key: String): String? = dataSource.connection.use { connection ->

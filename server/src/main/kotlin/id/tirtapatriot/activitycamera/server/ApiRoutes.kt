@@ -39,6 +39,7 @@ class ServerDeps(
     val captures: CaptureDb,
     val users: UserDb,
     val settings: SettingsRepository,
+    val tasks: TaskDb,
     val auth: AuthService,
 )
 
@@ -98,7 +99,14 @@ fun Route.apiRoutes(deps: ServerDeps) {
 
         // Multipart upload: "metadata" (CaptureMetadata JSON) followed by "file".
         post {
-            val user = requireUser(deps) ?: return@post
+            // Signed-in officer, or an anonymous device when the admin allows it.
+            val user = deps.auth.userFromBearer(call)
+            if (user == null) {
+                val policy = blocking { deps.settings.appConfig().capture }
+                if (policy.requireSignIn || !policy.allowAnonymousUpload) {
+                    return@post call.respond(HttpStatusCode.Unauthorized, ErrorResponse("Sign-in required"))
+                }
+            }
 
             var metadata: CaptureMetadata? = null
             var tempFile: File? = null
@@ -126,7 +134,7 @@ fun Route.apiRoutes(deps: ServerDeps) {
                 }
 
                 // The officer code always comes from the signed-in account, never from the device.
-                val meta = metadata?.copy(userCode = user.userCode)
+                val meta = metadata?.copy(userCode = user?.userCode)
                     ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorResponse("Part 'metadata' is required"))
                 val file = tempFile
                     ?: return@post call.respond(HttpStatusCode.BadRequest, ErrorResponse("Part 'file' is required"))
@@ -141,7 +149,11 @@ fun Route.apiRoutes(deps: ServerDeps) {
                 val fileSize = file.length()
                 val relativePath = deps.storage.commit(file, meta, originalName)
                 tempFile = null // moved already, don't delete in finally
-                val id = blocking { deps.captures.insert(meta, user.id, relativePath, fileSize, originalName) }
+                // Keep the task only when it still exists; its name is stored as shown on the device anyway.
+                val taskTypeId = meta.taskId?.let { blocking { deps.tasks.findActive(it) }?.id }
+                val id = blocking {
+                    deps.captures.insert(meta, user?.id, taskTypeId, relativePath, fileSize, originalName)
+                }
                 call.respond(HttpStatusCode.Created, UploadResponse(id, meta.clientId, relativePath, duplicate = false))
             } finally {
                 tempFile?.delete()

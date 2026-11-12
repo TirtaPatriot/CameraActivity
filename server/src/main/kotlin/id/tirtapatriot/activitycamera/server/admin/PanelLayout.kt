@@ -26,6 +26,7 @@ import kotlinx.html.unsafe
 enum class PanelSection(val path: String) {
     CAPTURES("/admin"),
     USERS("/admin/users"),
+    TASKS("/admin/tasks"),
     BRANDING("/admin/branding"),
     POLICY("/admin/policy"),
     CONNECT("/admin/connect"),
@@ -67,6 +68,7 @@ th { font-size: 13px; color: var(--muted); font-weight: 600; }
 td form { display: inline-flex; gap: 6px; margin: 0 6px 6px 0; }
 .badge { font-size: 12px; padding: 2px 8px; border-radius: 99px; background: #e8f5e9; color: var(--ok); }
 .badge.off { background: #f1f1f1; color: var(--muted); }
+.badge.warn { background: #fff4e5; color: #8a4b00; }
 .logo-preview { max-height: 80px; max-width: 240px; display: block; margin: 8px 0; }
 .qr { background: #fff; display: inline-block; padding: 12px; border-radius: 10px; border: 1px solid var(--border); }
 code { background: #eef1f5; padding: 2px 6px; border-radius: 4px; }
@@ -102,6 +104,7 @@ suspend fun ApplicationCall.respondPanel(
                     nav {
                         navLink(PanelSection.CAPTURES, strings.navCaptures, section)
                         navLink(PanelSection.USERS, strings.navUsers, section)
+                        navLink(PanelSection.TASKS, strings.navTasks, section)
                         navLink(PanelSection.BRANDING, strings.navBranding, section)
                         navLink(PanelSection.POLICY, strings.navPolicy, section)
                         navLink(PanelSection.CONNECT, strings.navConnect, section)

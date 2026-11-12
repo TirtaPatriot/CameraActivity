@@ -36,12 +36,14 @@ fun Application.module(config: ServerConfig) {
     val users = UserDb(database.dataSource)
     ensureAdminExists(users, config)
 
+    val tasks = TaskDb(database.dataSource)
     val deps = ServerDeps(
         config = config,
         storage = storage,
         captures = CaptureDb(database.dataSource, config.timeZone),
         users = users,
-        settings = SettingsRepository(database.dataSource),
+        settings = SettingsRepository(database.dataSource, tasks),
+        tasks = tasks,
         auth = AuthService(users),
     )
 

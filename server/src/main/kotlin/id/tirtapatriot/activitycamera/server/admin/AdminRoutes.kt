@@ -9,6 +9,7 @@ import id.tirtapatriot.activitycamera.model.UserRole
 import id.tirtapatriot.activitycamera.server.AuthService
 import id.tirtapatriot.activitycamera.server.PasswordHasher
 import id.tirtapatriot.activitycamera.server.ServerDeps
+import id.tirtapatriot.activitycamera.server.TaskDb
 import id.tirtapatriot.activitycamera.server.UserRecord
 import id.tirtapatriot.activitycamera.server.blocking
 import io.ktor.http.Cookie
@@ -180,7 +181,7 @@ fun Route.adminRoutes(deps: ServerDeps) {
                     table {
                         thead {
                             tr {
-                                th { +s.time }; th { +s.officer }; th { +s.type }; th { +s.note }
+                                th { +s.time }; th { +s.officer }; th { +s.type }; th { +s.task }; th { +s.note }
                                 th { +s.location }; th { +s.size }; th { +s.file }
                             }
                         }
@@ -189,10 +190,20 @@ fun Route.adminRoutes(deps: ServerDeps) {
                                 tr {
                                     td { +formatter.format(Instant.ofEpochMilli(row.takenAtEpochMs)) }
                                     td {
-                                        +(row.userDisplayName ?: "—")
-                                        row.userCode?.let { span("muted") { +" ($it)" } }
+                                        val name = row.userDisplayName
+                                        if (name != null) {
+                                            +name
+                                            row.userCode?.let { span("muted") { +" ($it)" } }
+                                        } else {
+                                            span("badge off") { +s.anonymous }
+                                            span("muted") { +" ${row.deviceModel.orEmpty()} · ${row.deviceId?.take(8).orEmpty()}" }
+                                        }
                                     }
-                                    td { +(if (row.mediaType == MediaType.PHOTO) s.photo else s.video) }
+                                    td {
+                                        +(if (row.mediaType == MediaType.PHOTO) s.photo else s.video)
+                                        if (row.sharedAtEpochMs != null) { +" "; span("badge") { +s.shared } }
+                                    }
+                                    td { +(row.taskName ?: "—") }
                                     td { +(row.note ?: "") }
                                     td {
                                         val lat = row.latitude
@@ -201,6 +212,7 @@ fun Route.adminRoutes(deps: ServerDeps) {
                                             a(href = "https://www.openstreetmap.org/?mlat=$lat&mlon=$lon#map=18/$lat/$lon", target = "_blank") {
                                                 +s.map
                                             }
+                                            if (row.isMockLocation) { +" "; span("badge warn") { +s.mockLocation } }
                                         } else {
                                             +"—"
                                         }
@@ -350,6 +362,48 @@ fun Route.adminRoutes(deps: ServerDeps) {
             call.respondRedirect("/admin/branding?msg=saved")
         }
 
+        // ---- Task types ----------------------------------------------------
+        get("/tasks") {
+            panelAdmin(deps) ?: return@get
+            call.tasksPage(deps, call.request.queryParameters["msg"]?.let { call.strings().saved }, isError = false)
+        }
+
+        post("/tasks") {
+            panelAdmin(deps) ?: return@post
+            val form = call.receiveParameters()
+            val name = form["name"].orEmpty().trim()
+            if (name.isEmpty() || name.length > 100) return@post call.tasksPage(deps, call.strings().errTaskName, isError = true)
+            blocking {
+                deps.tasks.create(name, form.taskIcon(), form["sortOrder"]?.toIntOrNull() ?: 0)
+                deps.settings.invalidate()
+            }
+            call.respondRedirect("/admin/tasks?msg=saved")
+        }
+
+        post("/tasks/{id}") {
+            panelAdmin(deps) ?: return@post
+            val id = call.parameters["id"]?.toLongOrNull() ?: return@post call.respond(HttpStatusCode.NotFound)
+            val form = call.receiveParameters()
+            val name = form["name"].orEmpty().trim()
+            if (name.isEmpty() || name.length > 100) return@post call.tasksPage(deps, call.strings().errTaskName, isError = true)
+            blocking {
+                deps.tasks.update(id, name, form.taskIcon(), form["sortOrder"]?.toIntOrNull() ?: 0)
+                deps.settings.invalidate()
+            }
+            call.respondRedirect("/admin/tasks?msg=saved")
+        }
+
+        post("/tasks/{id}/active") {
+            panelAdmin(deps) ?: return@post
+            val id = call.parameters["id"]?.toLongOrNull() ?: return@post call.respond(HttpStatusCode.NotFound)
+            val active = call.receiveParameters()["active"] == "true"
+            blocking {
+                deps.tasks.setActive(id, active)
+                deps.settings.invalidate()
+            }
+            call.respondRedirect("/admin/tasks?msg=saved")
+        }
+
         // ---- Capture rules -------------------------------------------------
         get("/policy") {
             panelAdmin(deps) ?: return@get
@@ -362,13 +416,12 @@ fun Route.adminRoutes(deps: ServerDeps) {
             val policy = CapturePolicy(
                 allowPhoto = form.flag("allowPhoto"),
                 allowVideo = form.flag("allowVideo"),
+                allowAnonymousUpload = form.flag("allowAnonymousUpload"),
+                requireSignIn = form.flag("requireSignIn"),
+                requireTask = form.flag("requireTask"),
                 requireLocation = form.flag("requireLocation"),
-                requireNote = form.flag("requireNote"),
                 recordAudio = form.flag("recordAudio"),
                 maxVideoSeconds = form["maxVideoSeconds"]?.toIntOrNull() ?: -1,
-                stampShowOrganization = form.flag("stampShowOrganization"),
-                stampShowCoordinates = form.flag("stampShowCoordinates"),
-                stampShowOfficer = form.flag("stampShowOfficer"),
                 defaultLanguage = form["defaultLanguage"].takeIf { it == "en" } ?: "id",
             )
             if ((!policy.allowPhoto && !policy.allowVideo) || policy.maxVideoSeconds !in 5..3600) {
@@ -518,25 +571,86 @@ private suspend fun ApplicationCall.brandingPage(deps: ServerDeps, message: Stri
     }
 }
 
+private suspend fun ApplicationCall.tasksPage(deps: ServerDeps, message: String?, isError: Boolean) {
+    val s = strings()
+    val tasks = blocking { deps.tasks.listAll() }
+    respondPanel(s, deps.branding(), s.tasksTitle, PanelSection.TASKS, status = if (isError) HttpStatusCode.BadRequest else HttpStatusCode.OK) {
+        flash(message, isError)
+        p("muted") { +s.tasksIntro }
+        if (tasks.isEmpty()) {
+            p("muted") { +s.noTasks }
+        } else {
+            div("table-wrap") {
+                table {
+                    thead { tr { th { +"${s.taskName} · ${s.icon} · ${s.order}" }; th { +s.status } } }
+                    tbody {
+                        tasks.forEach { task ->
+                            tr {
+                                td {
+                                    form(action = "/admin/tasks/${task.id}", method = FormMethod.post) {
+                                        textInput(name = "name") { value = task.name; required = true; attributes["maxlength"] = "100" }
+                                        iconSelect(s, task.icon)
+                                        numberInput(name = "sortOrder") { value = task.sortOrder.toString(); attributes["style"] = "width: 80px" }
+                                        button(type = ButtonType.submit, classes = "secondary") { +s.save }
+                                    }
+                                }
+                                td {
+                                    span(if (task.isActive) "badge" else "badge off") { +(if (task.isActive) s.active else s.inactive) }
+                                    form(action = "/admin/tasks/${task.id}/active", method = FormMethod.post) {
+                                        input(type = InputType.hidden, name = "active") { value = (!task.isActive).toString() }
+                                        button(type = ButtonType.submit, classes = if (task.isActive) "danger" else "secondary") {
+                                            +(if (task.isActive) s.deactivate else s.activate)
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+        h2 { +s.addTask }
+        form(action = "/admin/tasks", method = FormMethod.post, classes = "card row") {
+            label { +s.taskName; textInput(name = "name") { required = true; attributes["maxlength"] = "100" } }
+            label { +s.icon; iconSelect(s, "other") }
+            label { +s.order; numberInput(name = "sortOrder") { value = ((tasks.maxOfOrNull { it.sortOrder } ?: 0) + 10).toString() } }
+            button(type = ButtonType.submit) { +s.addTask }
+        }
+    }
+}
+
+private fun kotlinx.html.FlowOrInteractiveOrPhrasingContent.iconSelect(s: PanelStrings, current: String) {
+    select {
+        name = "icon"
+        TaskDb.ICONS.forEach { key ->
+            option { value = key; selected = key == current; +s.iconLabel(key) }
+        }
+    }
+}
+
+private fun Parameters.taskIcon() =
+    this["icon"]?.takeIf { it in TaskDb.ICONS } ?: "other"
+
 private suspend fun ApplicationCall.policyPage(deps: ServerDeps, message: String?, isError: Boolean) {
     val s = strings()
     val policy = blocking { deps.settings.appConfig().capture }
     respondPanel(s, deps.branding(), s.policyTitle, PanelSection.POLICY, status = if (isError) HttpStatusCode.BadRequest else HttpStatusCode.OK) {
         flash(message, isError)
+        p("muted") { +s.policyIntro }
         form(action = "/admin/policy", method = FormMethod.post, classes = "card") {
+            h2 { +s.accessTitle }
+            checkbox("allowAnonymousUpload", s.allowAnonymousUpload, policy.allowAnonymousUpload)
+            checkbox("requireSignIn", s.requireSignIn, policy.requireSignIn)
+            checkbox("requireTask", s.requireTask, policy.requireTask)
+            h2 { +s.policyTitle }
             checkbox("allowPhoto", s.allowPhoto, policy.allowPhoto)
             checkbox("allowVideo", s.allowVideo, policy.allowVideo)
             checkbox("requireLocation", s.requireLocation, policy.requireLocation)
-            checkbox("requireNote", s.requireNote, policy.requireNote)
             checkbox("recordAudio", s.recordAudio, policy.recordAudio)
             label {
                 +s.maxVideoSeconds
                 numberInput(name = "maxVideoSeconds") { value = policy.maxVideoSeconds.toString(); attributes["min"] = "5"; attributes["max"] = "3600" }
             }
-            h2 { +s.stampTitle }
-            checkbox("stampShowOrganization", s.stampOrganization, policy.stampShowOrganization)
-            checkbox("stampShowCoordinates", s.stampCoordinates, policy.stampShowCoordinates)
-            checkbox("stampShowOfficer", s.stampOfficer, policy.stampShowOfficer)
             label {
                 +s.defaultLanguage
                 select {

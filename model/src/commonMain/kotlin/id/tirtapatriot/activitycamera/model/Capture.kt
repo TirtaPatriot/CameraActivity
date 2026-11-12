@@ -21,12 +21,21 @@ data class CaptureMetadata(
     val longitude: Double? = null,
     val accuracyMeters: Float? = null,
     val altitudeMeters: Double? = null,
-    /** Activity description typed by the officer. */
+    /** True when the OS reported the location as coming from a mock/simulated provider. */
+    val isMockLocation: Boolean = false,
+    /** Optional free text typed by the officer. */
     val note: String? = null,
-    /** Officer code / employee ID of the signed-in account (the server re-checks it). */
+    /** Optional task picked by the officer (null = no task). */
+    val taskId: Long? = null,
+    val taskName: String? = null,
+    /** Officer code of the signed-in account; the server re-checks it. Null when anonymous. */
     val userCode: String? = null,
+    /** Random id generated once per app install; identifies anonymous uploads. */
+    val deviceId: String? = null,
     val deviceModel: String,
     val platform: String,
+    /** When the officer shared the capture (WhatsApp, group, …) before it was uploaded. */
+    val sharedAtEpochMs: Long? = null,
 )
 
 @Serializable
@@ -47,11 +56,16 @@ data class CaptureSummary(
     val latitude: Double?,
     val longitude: Double?,
     val accuracyMeters: Float?,
+    val isMockLocation: Boolean,
     val note: String?,
+    val taskName: String?,
     val userCode: String?,
     val userDisplayName: String?,
+    val deviceId: String?,
+    val deviceModel: String?,
     val storagePath: String,
     val fileSize: Long,
+    val sharedAtEpochMs: Long?,
     val uploadedAtEpochMs: Long,
 )
 

@@ -9,6 +9,7 @@ class PanelStrings(val language: String) {
     val navCaptures get() = t("Tangkapan", "Captures")
     val navUsers get() = t("Petugas", "Officers")
     val navBranding get() = t("Branding", "Branding")
+    val navTasks get() = t("Tugas", "Tasks")
     val navPolicy get() = t("Aturan", "Rules")
     val navConnect get() = t("Hubungkan HP", "Connect phone")
     val logout get() = t("Keluar", "Sign out")
@@ -40,6 +41,10 @@ class PanelStrings(val language: String) {
     val photo get() = t("Foto", "Photo")
     val video get() = t("Video", "Video")
     val noCaptures get() = t("Belum ada tangkapan.", "No captures yet.")
+    val task get() = t("Tugas", "Task")
+    val anonymous get() = t("Tanpa akun", "Anonymous")
+    val mockLocation get() = t("Lokasi palsu", "Mock location")
+    val shared get() = t("Dibagikan", "Shared")
 
     // Officers
     val usersTitle get() = t("Akun petugas & admin", "Officer & admin accounts")
@@ -88,18 +93,42 @@ class PanelStrings(val language: String) {
     val errColor get() = t("Warna harus format #RRGGBB.", "Color must be #RRGGBB.")
     val errLogo get() = t("Logo harus PNG/JPEG dan maksimal 1 MB.", "Logo must be PNG/JPEG and at most 1 MB.")
 
+    // Tasks
+    val tasksTitle get() = t("Jenis tugas", "Task types")
+    val tasksIntro get() = t(
+        "Pilihan tugas yang muncul di kamera petugas. Petugas boleh tidak memilih tugas, kecuali aturan \"wajib pilih tugas\" dinyalakan.",
+        "Tasks officers can pick in the camera. Picking one is optional unless the \"require a task\" rule is on.",
+    )
+    val taskName get() = t("Nama tugas", "Task name")
+    val icon get() = t("Ikon", "Icon")
+    val order get() = t("Urutan", "Order")
+    val addTask get() = t("Tambah tugas", "Add task")
+    val noTasks get() = t("Belum ada jenis tugas.", "No task types yet.")
+    val errTaskName get() = t("Nama tugas wajib diisi (maks. 100 karakter).", "Task name is required (max 100 characters).")
+    fun iconLabel(key: String) = when (key) {
+        "meter" -> t("Meter", "Meter")
+        "inspect" -> t("Periksa", "Inspect")
+        "replace" -> t("Ganti", "Replace")
+        "leak" -> t("Bocor", "Leak")
+        "seal" -> t("Segel", "Seal")
+        else -> t("Lainnya", "Other")
+    }
+
     // Capture rules
     val policyTitle get() = t("Aturan pengambilan", "Capture rules")
+    val policyIntro get() = t(
+        "Semua aturan longgar secara bawaan supaya petugas terbiasa dulu. Ketatkan pelan-pelan setelah kebiasaannya terbentuk.",
+        "All rules start permissive so officers get used to the app first. Tighten them gradually once the habit has formed.",
+    )
+    val accessTitle get() = t("Akun & tugas", "Accounts & tasks")
+    val allowAnonymousUpload get() = t("Izinkan unggah tanpa akun (dicatat per perangkat)", "Allow uploads without an account (recorded per device)")
+    val requireSignIn get() = t("Wajib masuk sebelum foto dikirim ke server", "Require sign-in before captures are uploaded")
+    val requireTask get() = t("Wajib pilih tugas sebelum memotret", "Require a task before taking a photo")
     val allowPhoto get() = t("Izinkan foto", "Allow photos")
     val allowVideo get() = t("Izinkan video", "Allow videos")
     val requireLocation get() = t("Wajib ada lokasi GPS", "Require GPS location")
-    val requireNote get() = t("Wajib isi keterangan", "Require a note")
     val recordAudio get() = t("Rekam suara pada video", "Record audio in videos")
     val maxVideoSeconds get() = t("Durasi video maksimal (detik)", "Maximum video length (seconds)")
-    val stampTitle get() = t("Isi cap foto", "Photo stamp contents")
-    val stampOrganization get() = t("Nama instansi", "Organization name")
-    val stampCoordinates get() = t("Koordinat", "Coordinates")
-    val stampOfficer get() = t("Kode petugas", "Officer code")
     val defaultLanguage get() = t("Bahasa awal aplikasi", "Default app language")
     val errPolicy get() = t(
         "Minimal salah satu foto atau video harus diizinkan; durasi 5–3600 detik.",

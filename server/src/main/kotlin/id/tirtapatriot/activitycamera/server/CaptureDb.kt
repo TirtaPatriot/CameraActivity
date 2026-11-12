@@ -26,7 +26,8 @@ class CaptureDb(private val dataSource: DataSource, private val reportZone: Zone
 
     fun insert(
         metadata: CaptureMetadata,
-        userId: Long,
+        userId: Long?,
+        taskTypeId: Long?,
         storagePath: String,
         fileSize: Long,
         originalName: String?,
@@ -34,9 +35,10 @@ class CaptureDb(private val dataSource: DataSource, private val reportZone: Zone
         val sql = """
             INSERT INTO cactivity.capture
               (client_id, media_type, taken_at, timezone, latitude, longitude, accuracy_m, altitude_m,
-               note, user_code, device_model, platform, storage_path, file_size, original_name, user_id)
+               note, user_code, device_model, platform, storage_path, file_size, original_name, user_id,
+               task_type_id, task_name, is_mock_location, device_id, shared_at)
             OUTPUT INSERTED.id
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """.trimIndent()
         connection.prepareStatement(sql).use { statement ->
             val zone = runCatching { ZoneId.of(metadata.timezone) }.getOrDefault(ZoneOffset.UTC)
@@ -55,7 +57,13 @@ class CaptureDb(private val dataSource: DataSource, private val reportZone: Zone
             statement.setString(13, storagePath)
             statement.setLong(14, fileSize)
             statement.setNullableString(15, originalName)
-            statement.setLong(16, userId)
+            if (userId == null) statement.setNull(16, java.sql.Types.BIGINT) else statement.setLong(16, userId)
+            if (taskTypeId == null) statement.setNull(17, java.sql.Types.BIGINT) else statement.setLong(17, taskTypeId)
+            statement.setNullableString(18, metadata.taskName?.take(100))
+            statement.setBoolean(19, metadata.isMockLocation)
+            statement.setNullableString(20, metadata.deviceId?.take(64))
+            val sharedAt = metadata.sharedAtEpochMs?.let { Instant.ofEpochMilli(it).atZone(zone).toOffsetDateTime() }
+            if (sharedAt == null) statement.setNull(21, java.sql.Types.TIMESTAMP_WITH_TIMEZONE) else statement.setObject(21, sharedAt)
             statement.executeQuery().use { rs ->
                 rs.next()
                 rs.getLong(1)
@@ -84,7 +92,8 @@ class CaptureDb(private val dataSource: DataSource, private val reportZone: Zone
             val sql = buildString {
                 append("SELECT TOP (").append(limit.coerceIn(1, 1000)).append(") ")
                 append("c.id, c.client_id, c.media_type, c.taken_at, c.latitude, c.longitude, c.accuracy_m, c.note, ")
-                append("c.user_code, u.display_name, c.storage_path, c.file_size, c.uploaded_at ")
+                append("c.user_code, u.display_name, c.storage_path, c.file_size, c.uploaded_at, ")
+                append("c.task_name, c.is_mock_location, c.device_id, c.device_model, c.shared_at ")
                 append("FROM cactivity.capture c LEFT JOIN cactivity.app_user u ON u.id = c.user_id")
                 if (conditions.isNotEmpty()) append(" WHERE ").append(conditions.joinToString(" AND "))
                 append(" ORDER BY c.taken_at DESC")
@@ -112,11 +121,16 @@ class CaptureDb(private val dataSource: DataSource, private val reportZone: Zone
         latitude = getNullableDouble("latitude"),
         longitude = getNullableDouble("longitude"),
         accuracyMeters = getNullableDouble("accuracy_m")?.toFloat(),
+        isMockLocation = getBoolean("is_mock_location"),
         note = getString("note"),
+        taskName = getString("task_name"),
         userCode = getString("user_code"),
         userDisplayName = getString("display_name"),
+        deviceId = getString("device_id"),
+        deviceModel = getString("device_model"),
         storagePath = getString("storage_path"),
         fileSize = getLong("file_size"),
+        sharedAtEpochMs = getObject("shared_at", OffsetDateTime::class.java)?.toInstant()?.toEpochMilli(),
         uploadedAtEpochMs = getUtcInstant("uploaded_at")?.toEpochMilli() ?: 0L,
     )
 }

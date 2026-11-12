@@ -22,20 +22,34 @@ data class Branding(
     val logoVersion: Long? = null,
 )
 
-/** Rules the app enforces when capturing. */
+/**
+ * Rules set by the admin. Everything defaults to permissive: officers can use the camera
+ * without an account or a task, and the admin tightens the rules once the habit has formed.
+ */
 @Serializable
 data class CapturePolicy(
     val allowPhoto: Boolean = true,
     val allowVideo: Boolean = true,
+    /** Captures may be uploaded without signing in (recorded per device). */
+    val allowAnonymousUpload: Boolean = true,
+    /** When true the app asks for sign-in before captures are uploaded. */
+    val requireSignIn: Boolean = false,
+    /** When true a task must be picked before taking a photo. */
+    val requireTask: Boolean = false,
     val requireLocation: Boolean = false,
-    val requireNote: Boolean = false,
     val recordAudio: Boolean = true,
     val maxVideoSeconds: Int = 120,
-    val stampShowOrganization: Boolean = true,
-    val stampShowCoordinates: Boolean = true,
-    val stampShowOfficer: Boolean = true,
     /** Default UI language for new installs: "id" or "en". */
     val defaultLanguage: String = "id",
+)
+
+/** A kind of field work officers can pick (e.g. "Meter inspection"). Managed in the admin panel. */
+@Serializable
+data class TaskType(
+    val id: Long,
+    val name: String,
+    /** Icon key understood by the app: meter, inspect, replace, leak, seal, other. */
+    val icon: String = "other",
 )
 
 /** Public configuration served by GET /api/v1/config. */
@@ -43,6 +57,7 @@ data class CapturePolicy(
 data class AppConfig(
     val branding: Branding = Branding(),
     val capture: CapturePolicy = CapturePolicy(),
+    val tasks: List<TaskType> = emptyList(),
 )
 
 /** Content of the connect QR code shown in the admin panel. */
