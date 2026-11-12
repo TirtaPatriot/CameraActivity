@@ -1,0 +1,62 @@
+# Generate the Xcode project with XcodeGen:
+#   brew install xcodegen
+#   cd iosApp && xcodegen generate && open iosApp.xcodeproj
+name: iosApp
+options:
+  bundleIdPrefix: id.tirtapatriot
+  developmentLanguage: id
+  deploymentTarget:
+    iOS: "15.0"
+settings:
+  base:
+    ENABLE_USER_SCRIPT_SANDBOXING: NO
+    SWIFT_VERSION: "5.0"
+targets:
+  iosApp:
+    type: application
+    platform: iOS
+    sources:
+      - iosApp   # includes id.lproj / en.lproj InfoPlist.strings
+    info:
+      path: iosApp/Info.plist
+      properties:
+        CFBundleDevelopmentRegion: id
+        CFBundleLocalizations:
+          - id
+          - en
+        CFBundleDisplayName: Kamera Kegiatan
+        CFBundleShortVersionString: "0.1.0"
+        CFBundleVersion: "1"
+        UILaunchScreen: {}
+        CADisableMinimumFrameDurationOnPhone: true
+        UISupportedInterfaceOrientations:
+          - UIInterfaceOrientationPortrait
+        # Defaults (Indonesian); translations live in */InfoPlist.strings
+        NSCameraUsageDescription: Kamera dipakai untuk memotret dan merekam kegiatan.
+        NSMicrophoneUsageDescription: Mikrofon dipakai untuk merekam suara pada video kegiatan.
+        NSLocationWhenInUseUsageDescription: Lokasi dicantumkan pada foto dan video sebagai bukti tempat kegiatan.
+        # Sync server on the internal network (http). Narrow/remove once the server uses https.
+        NSAppTransportSecurity:
+          NSAllowsArbitraryLoads: true
+    settings:
+      base:
+        PRODUCT_BUNDLE_IDENTIFIER: id.tirtapatriot.activitycamera
+        PRODUCT_NAME: ActivityCamera
+        DEVELOPMENT_TEAM: ""
+        FRAMEWORK_SEARCH_PATHS:
+          - "$(inherited)"
+          - "$(SRCROOT)/../shared/build/xcode-frameworks/$(CONFIGURATION)/$(SDK_NAME)"
+        OTHER_LDFLAGS:
+          - "$(inherited)"
+          - "-framework"
+          - "Shared"
+    preBuildScripts:
+      - name: Compile Kotlin Framework
+        basedOnDependencyAnalysis: false
+        script: |
+          if [ "YES" = "$OVERRIDE_KOTLIN_BUILD_IDE_SUPPORTED" ]; then
+            echo "Skipping Gradle build (run by the IDE)"
+            exit 0
+          fi
+          cd "$SRCROOT/.."
+          ./gradlew :shared:embedAndSignAppleFrameworkForXcode

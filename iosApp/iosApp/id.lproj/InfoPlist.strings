@@ -1,0 +1,4 @@
+"CFBundleDisplayName" = "Kamera Kegiatan";
+"NSCameraUsageDescription" = "Kamera dipakai untuk memotret dan merekam kegiatan.";
+"NSMicrophoneUsageDescription" = "Mikrofon dipakai untuk merekam suara pada video kegiatan.";
+"NSLocationWhenInUseUsageDescription" = "Lokasi dicantumkan pada foto dan video sebagai bukti tempat kegiatan.";

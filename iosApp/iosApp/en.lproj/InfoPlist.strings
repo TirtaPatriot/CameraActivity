@@ -1,0 +1,4 @@
+"CFBundleDisplayName" = "Activity Camera";
+"NSCameraUsageDescription" = "The camera is used to take photos and record videos of activities.";
+"NSMicrophoneUsageDescription" = "The microphone is used to record audio in activity videos.";
+"NSLocationWhenInUseUsageDescription" = "Location is included on photos and videos as proof of where the activity took place.";
