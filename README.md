@@ -99,8 +99,8 @@ On the first SSO sign-in an account is linked by the provider's `sub`: to an exi
 
 The in-app branding comes from the server. To publish a build with your own home-screen name, icon and identifiers, change:
 
-- Android: `applicationId` in `androidApp/build.gradle.kts`, `app_name` in `androidApp/src/main/res/values*/strings.xml`, launcher icon resources.
-- iOS: `PRODUCT_BUNDLE_IDENTIFIER` and `CFBundleDisplayName` in `iosApp/project.yml`, `iosApp/iosApp/*.lproj/InfoPlist.strings`, app icon.
+- Android: `applicationId` in `androidApp/build.gradle.kts`, `app_name` in `androidApp/src/main/res/values*/strings.xml`, launcher icon in `androidApp/src/main/res/drawable/ic_launcher_*.xml` (adaptive icon: foreground, background, monochrome).
+- iOS: `PRODUCT_BUNDLE_IDENTIFIER` and `CFBundleDisplayName` in `iosApp/project.yml`, `iosApp/iosApp/*.lproj/InfoPlist.strings`, app icon `iosApp/iosApp/Assets.xcassets/AppIcon.appiconset/AppIcon-1024.png` (1024×1024, no transparency).
 
 ## API
 
