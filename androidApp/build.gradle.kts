@@ -1,4 +1,5 @@
 import org.jetbrains.kotlin.gradle.dsl.JvmTarget
+import java.security.KeyStore
 
 plugins {
     alias(libs.plugins.androidApplication)
@@ -71,7 +72,7 @@ dependencies {
  */
 fun resolveKeyAlias(keystore: File, password: String?, configured: String?): String? {
     val aliases = runCatching {
-        val store = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType())
+        val store = KeyStore.getInstance(KeyStore.getDefaultType())
         keystore.inputStream().use { store.load(it, password?.toCharArray()) }
         store.aliases().toList().filter { store.isKeyEntry(it) }
     }.getOrElse {
