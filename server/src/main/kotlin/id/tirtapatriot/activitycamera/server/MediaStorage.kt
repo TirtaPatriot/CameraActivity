@@ -23,10 +23,26 @@ class MediaStorage(root: String) {
     private val rootDir: File = File(root).canonicalFile
     private val tempDir = File(rootDir, ".tmp")
 
+    private val logoFile = File(File(rootDir, "branding"), "logo")
+
     /** Fail fast at startup when the NAS is not mounted or not writable. */
     fun checkWritable() {
         tempDir.mkdirs()
         require(tempDir.isDirectory && tempDir.canWrite()) { "STORAGE_ROOT is not writable: $rootDir" }
+    }
+
+    /** Organization logo uploaded from the admin panel (<root>/branding/logo). */
+    fun saveLogo(bytes: ByteArray) {
+        logoFile.parentFile.mkdirs()
+        val temp = File(logoFile.parentFile, "logo.tmp")
+        temp.writeBytes(bytes)
+        Files.move(temp.toPath(), logoFile.toPath(), StandardCopyOption.REPLACE_EXISTING)
+    }
+
+    fun logo(): File? = logoFile.takeIf { it.isFile }
+
+    fun deleteLogo() {
+        logoFile.delete()
     }
 
     /** Streams an upload into a temp file on the NAS (never held in memory). */

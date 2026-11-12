@@ -15,28 +15,37 @@ import kotlin.uuid.Uuid
 object StampFormatter {
     private const val MAX_NOTE_LENGTH = 60
 
-    /** Stamp lines: date-time, coordinates, note, officer code. */
+    /**
+     * Stamp lines: organization, date-time, coordinates, note, officer.
+     * Pass null for [organization]/[officer] or false for [showCoordinates] to leave a line out
+     * (controlled by the server's capture policy).
+     */
     fun lines(
         epochMs: Long,
         timeZone: TimeZone,
         fix: GeoFix?,
         note: String,
-        userCode: String,
         strings: Strings,
+        organization: String?,
+        officer: String?,
+        showCoordinates: Boolean,
     ): List<String> = buildList {
+        organization?.trim()?.takeIf { it.isNotEmpty() }?.let { add(it.take(MAX_NOTE_LENGTH)) }
         add(dateTime(epochMs, timeZone, strings))
-        add(
-            if (fix == null) {
-                strings.locationSearching
-            } else {
-                buildString {
-                    append(fix.latitude.toFixed(6)).append(", ").append(fix.longitude.toFixed(6))
-                    fix.accuracyMeters?.let { append("  (±").append(it.roundToLong()).append(" m)") }
-                }
-            },
-        )
+        if (showCoordinates) {
+            add(
+                if (fix == null) {
+                    strings.locationSearching
+                } else {
+                    buildString {
+                        append(fix.latitude.toFixed(6)).append(", ").append(fix.longitude.toFixed(6))
+                        fix.accuracyMeters?.let { append("  (±").append(it.roundToLong()).append(" m)") }
+                    }
+                },
+            )
+        }
         note.trim().takeIf { it.isNotEmpty() }?.let { add(it.take(MAX_NOTE_LENGTH)) }
-        userCode.trim().takeIf { it.isNotEmpty() }?.let { add(strings.officer(it)) }
+        officer?.trim()?.takeIf { it.isNotEmpty() }?.let { add(strings.officer(it)) }
     }
 
     fun dateTime(epochMs: Long, timeZone: TimeZone, strings: Strings): String {

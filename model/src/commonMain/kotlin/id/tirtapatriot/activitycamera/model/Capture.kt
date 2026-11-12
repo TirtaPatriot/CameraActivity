@@ -23,7 +23,7 @@ data class CaptureMetadata(
     val altitudeMeters: Double? = null,
     /** Activity description typed by the officer. */
     val note: String? = null,
-    /** Officer code / employee ID from app settings. */
+    /** Officer code / employee ID of the signed-in account (the server re-checks it). */
     val userCode: String? = null,
     val deviceModel: String,
     val platform: String,
@@ -49,6 +49,7 @@ data class CaptureSummary(
     val accuracyMeters: Float?,
     val note: String?,
     val userCode: String?,
+    val userDisplayName: String?,
     val storagePath: String,
     val fileSize: Long,
     val uploadedAtEpochMs: Long,
@@ -58,8 +59,12 @@ data class CaptureSummary(
 data class ErrorResponse(val error: String)
 
 object ApiContract {
+    const val CONFIG = "/api/v1/config"
+    const val LOGO = "/api/v1/branding/logo"
+    const val LOGIN = "/api/v1/auth/login"
+    const val LOGOUT = "/api/v1/auth/logout"
+    const val ME = "/api/v1/me"
     const val CAPTURES = "/api/v1/captures"
-    const val HEADER_API_KEY = "X-Api-Key"
     const val PART_METADATA = "metadata"
     const val PART_FILE = "file"
 }

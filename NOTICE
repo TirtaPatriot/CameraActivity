@@ -1,0 +1,10 @@
+Activity Camera
+Copyright 2026 Tirta Patriot
+
+This product is licensed under the Apache License, Version 2.0 (see LICENSE).
+
+It includes software developed by third parties, each under its own license,
+among others: Kotlin and kotlinx libraries, Ktor, Compose Multiplatform
+(JetBrains, Apache-2.0), AndroidX CameraX (Google, Apache-2.0), ZXing
+(Apache-2.0), HikariCP (Apache-2.0), Logback (EPL-1.0/LGPL-2.1) and the
+Microsoft JDBC Driver for SQL Server (MIT).

@@ -46,7 +46,7 @@ import platform.darwin.dispatch_get_global_queue
 import kotlin.coroutines.resume
 
 // AVFoundation constants are bridged as String?; fall back to their actual values.
-private val MEDIA_TYPE_VIDEO: String = AVMediaTypeVideo ?: "vide"
+internal val MEDIA_TYPE_VIDEO: String = AVMediaTypeVideo ?: "vide"
 private val MEDIA_TYPE_AUDIO: String = AVMediaTypeAudio ?: "soun"
 
 @Composable
@@ -67,7 +67,7 @@ actual fun CameraPreview(modifier: Modifier, onReady: (CameraController) -> Unit
 }
 
 /** UIView hosting an AVCaptureVideoPreviewLayer that follows the view's size. */
-private class PreviewView(session: AVCaptureSession) : UIView(frame = CGRectMake(0.0, 0.0, 0.0, 0.0)) {
+internal class PreviewView(session: AVCaptureSession) : UIView(frame = CGRectMake(0.0, 0.0, 0.0, 0.0)) {
     private val previewLayer = AVCaptureVideoPreviewLayer(session = session).apply {
         videoGravity = AVLayerVideoGravityResizeAspectFill ?: "AVLayerVideoGravityResizeAspectFill"
     }

@@ -70,8 +70,18 @@ fun CameraScreen(
     val timeZone = remember { TimeZone.currentSystemDefault() }
     val fix by locationProvider.fix.collectAsState()
 
+    // Rules and identity managed on the server (admin panel)
+    val policy = settings.config.capture
+    val branding = settings.config.branding
+    val user = settings.user
+    val officerLabel = user?.let { account -> account.userCode?.let { "${account.displayName} ($it)" } ?: account.displayName }
+    val allowedModes = buildList {
+        if (policy.allowPhoto) add(MediaType.PHOTO)
+        if (policy.allowVideo) add(MediaType.VIDEO)
+    }.ifEmpty { listOf(MediaType.PHOTO) }
+
     var controller by remember { mutableStateOf<CameraController?>(null) }
-    var mode by remember { mutableStateOf(MediaType.PHOTO) }
+    var mode by remember { mutableStateOf(allowedModes.first()) }
     var note by remember { mutableStateOf("") }
     var isBusy by remember { mutableStateOf(false) }
     var toastMessage by remember { mutableStateOf<String?>(null) }
@@ -89,6 +99,9 @@ fun CameraScreen(
             now = currentEpochMs()
             delay(1_000)
         }
+    }
+    LaunchedEffect(allowedModes) {
+        if (mode !in allowedModes && pendingVideo == null) mode = allowedModes.first()
     }
     LaunchedEffect(toastMessage) {
         if (toastMessage != null) {
@@ -109,7 +122,7 @@ fun CameraScreen(
             accuracyMeters = geo?.accuracyMeters,
             altitudeMeters = geo?.altitude,
             note = note.trim().ifEmpty { null },
-            userCode = settings.userCode.trim().ifEmpty { null },
+            userCode = user?.userCode,
             deviceModel = PlatformInfo.deviceModel,
             platform = PlatformInfo.name,
         )
@@ -119,9 +132,34 @@ fun CameraScreen(
         )
     }
 
+    fun stampLinesAt(epochMs: Long, geo: GeoFix?) = StampFormatter.lines(
+        epochMs = epochMs,
+        timeZone = timeZone,
+        fix = geo,
+        note = note,
+        strings = strings,
+        organization = branding.organizationName.takeIf { policy.stampShowOrganization },
+        officer = officerLabel.takeIf { policy.stampShowOfficer },
+        showCoordinates = policy.stampShowCoordinates,
+    )
+
+    /** Why a new capture may not start yet, per the server's rules; null when allowed. */
+    fun blockReason(): String? = when {
+        policy.requireLocation && fix == null -> strings.locationRequired
+        policy.requireNote && note.isBlank() -> strings.noteRequired
+        else -> null
+    }
+
     fun onShutter() {
         val camera = controller ?: return
         if (isBusy) return
+        val isStarting = mode == MediaType.PHOTO || pendingVideo == null
+        if (isStarting) {
+            blockReason()?.let {
+                toastMessage = it
+                return
+            }
+        }
         scope.launch {
             isBusy = true
             try {
@@ -130,10 +168,7 @@ fun CameraScreen(
                         val takenAt = currentEpochMs()
                         val geo = fix
                         val record = buildRecord(MediaType.PHOTO, takenAt, geo)
-                        val stamp = Stamp(
-                            StampFormatter.lines(takenAt, timeZone, geo, note, settings.userCode, strings),
-                            geo,
-                        )
+                        val stamp = Stamp(stampLinesAt(takenAt, geo), geo)
                         val saved = camera.takePhoto(repository.filePath(record.fileName), stamp)
                         if (saved) repository.add(record)
                         toastMessage = if (saved) strings.photoSaved else strings.photoFailed
@@ -143,7 +178,7 @@ fun CameraScreen(
                         val activeVideo = pendingVideo
                         if (activeVideo == null) {
                             val record = buildRecord(MediaType.VIDEO, currentEpochMs(), fix)
-                            if (camera.startRecording(repository.filePath(record.fileName), settings.recordAudio)) {
+                            if (camera.startRecording(repository.filePath(record.fileName), policy.recordAudio)) {
                                 pendingVideo = record
                             } else {
                                 toastMessage = strings.recordingStartFailed
@@ -162,8 +197,16 @@ fun CameraScreen(
         }
     }
 
+    // Stop automatically at the maximum video length set on the server.
+    LaunchedEffect(pendingVideo) {
+        if (pendingVideo == null) return@LaunchedEffect
+        delay(policy.maxVideoSeconds * 1_000L)
+        if (pendingVideo != null) onShutter()
+    }
+
     val isRecording = pendingVideo != null
-    val stampLines = StampFormatter.lines(now, timeZone, fix, note, settings.userCode, strings)
+    val stampLines = stampLinesAt(now, fix)
+    val recordingSeconds = pendingVideo?.let { ((now - it.meta.takenAtEpochMs) / 1_000).coerceAtLeast(0) }
 
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         CameraPreview(Modifier.fillMaxSize()) { controller = it }
@@ -174,17 +217,21 @@ fun CameraScreen(
             verticalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Row(verticalAlignment = Alignment.CenterVertically) {
-                FilterChip(
-                    selected = mode == MediaType.PHOTO,
-                    onClick = { if (!isRecording) mode = MediaType.PHOTO },
-                    label = { Text(strings.modePhoto) },
-                )
-                Spacer(Modifier.width(8.dp))
-                FilterChip(
-                    selected = mode == MediaType.VIDEO,
-                    onClick = { if (!isRecording) mode = MediaType.VIDEO },
-                    label = { Text(strings.modeVideo) },
-                )
+                allowedModes.forEach { option ->
+                    FilterChip(
+                        selected = mode == option,
+                        onClick = { if (!isRecording) mode = option },
+                        label = { Text(if (option == MediaType.PHOTO) strings.modePhoto else strings.modeVideo) },
+                    )
+                    Spacer(Modifier.width(8.dp))
+                }
+                recordingSeconds?.let { seconds ->
+                    Text(
+                        "● ${formatDuration(seconds)} / ${formatDuration(policy.maxVideoSeconds.toLong())}",
+                        color = Color.Red,
+                        fontWeight = FontWeight.SemiBold,
+                    )
+                }
                 Spacer(Modifier.weight(1f))
                 TextButton(onClick = onOpenSettings, enabled = !isRecording) { Text(strings.settings) }
             }
@@ -266,3 +313,6 @@ private fun ShutterButton(mode: MediaType, isRecording: Boolean, enabled: Boolea
 }
 
 private fun currentEpochMs(): Long = Clock.System.now().toEpochMilliseconds()
+
+private fun formatDuration(totalSeconds: Long): String =
+    "${totalSeconds / 60}:${(totalSeconds % 60).toString().padStart(2, '0')}"

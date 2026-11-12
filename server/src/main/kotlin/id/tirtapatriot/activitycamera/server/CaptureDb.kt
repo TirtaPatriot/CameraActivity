@@ -1,38 +1,19 @@
 package id.tirtapatriot.activitycamera.server
 
-import com.zaxxer.hikari.HikariConfig
-import com.zaxxer.hikari.HikariDataSource
 import id.tirtapatriot.activitycamera.model.CaptureMetadata
 import id.tirtapatriot.activitycamera.model.CaptureSummary
 import id.tirtapatriot.activitycamera.model.MediaType
 import id.tirtapatriot.activitycamera.model.UploadResponse
-import java.sql.PreparedStatement
 import java.sql.ResultSet
-import java.sql.Types
 import java.time.Instant
 import java.time.LocalDate
 import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
+import javax.sql.DataSource
 
-/** Capture metadata in SQL Server (table cactivity.capture, see server/sql/001_init.sql). */
-class CaptureDb(config: ServerConfig) : AutoCloseable {
-    private val dataSource = HikariDataSource(
-        HikariConfig().apply {
-            jdbcUrl = config.dbUrl
-            username = config.dbUser
-            password = config.dbPassword
-            maximumPoolSize = config.dbPoolSize
-            poolName = "activity-camera"
-        },
-    )
-
-    /** Date filters in the list endpoint are interpreted in WIB. */
-    private val reportOffset = ZoneOffset.ofHours(7)
-
-    fun ping() {
-        dataSource.connection.use { connection -> connection.createStatement().use { it.execute("SELECT 1") } }
-    }
+/** Capture metadata in SQL Server (table cactivity.capture). */
+class CaptureDb(private val dataSource: DataSource, private val reportZone: ZoneId) {
 
     fun findByClientId(clientId: String): UploadResponse? = dataSource.connection.use { connection ->
         connection.prepareStatement("SELECT id, storage_path FROM cactivity.capture WHERE client_id = ?").use { statement ->
@@ -43,62 +24,70 @@ class CaptureDb(config: ServerConfig) : AutoCloseable {
         }
     }
 
-    fun insert(metadata: CaptureMetadata, storagePath: String, fileSize: Long, originalName: String?): Long =
-        dataSource.connection.use { connection ->
-            val sql = """
-                INSERT INTO cactivity.capture
-                  (client_id, media_type, taken_at, timezone, latitude, longitude, accuracy_m, altitude_m,
-                   note, user_code, device_model, platform, storage_path, file_size, original_name)
-                OUTPUT INSERTED.id
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
-            """.trimIndent()
-            connection.prepareStatement(sql).use { statement ->
-                val zone = runCatching { ZoneId.of(metadata.timezone) }.getOrDefault(ZoneOffset.UTC)
-                statement.setString(1, metadata.clientId)
-                statement.setString(2, metadata.mediaType.name)
-                statement.setObject(3, Instant.ofEpochMilli(metadata.takenAtEpochMs).atZone(zone).toOffsetDateTime())
-                statement.setString(4, metadata.timezone)
-                statement.setNullableDouble(5, metadata.latitude)
-                statement.setNullableDouble(6, metadata.longitude)
-                statement.setNullableDouble(7, metadata.accuracyMeters?.toDouble())
-                statement.setNullableDouble(8, metadata.altitudeMeters)
-                statement.setString(9, metadata.note)
-                statement.setString(10, metadata.userCode)
-                statement.setString(11, metadata.deviceModel)
-                statement.setString(12, metadata.platform)
-                statement.setString(13, storagePath)
-                statement.setLong(14, fileSize)
-                statement.setString(15, originalName)
-                statement.executeQuery().use { rs ->
-                    rs.next()
-                    rs.getLong(1)
-                }
+    fun insert(
+        metadata: CaptureMetadata,
+        userId: Long,
+        storagePath: String,
+        fileSize: Long,
+        originalName: String?,
+    ): Long = dataSource.connection.use { connection ->
+        val sql = """
+            INSERT INTO cactivity.capture
+              (client_id, media_type, taken_at, timezone, latitude, longitude, accuracy_m, altitude_m,
+               note, user_code, device_model, platform, storage_path, file_size, original_name, user_id)
+            OUTPUT INSERTED.id
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        """.trimIndent()
+        connection.prepareStatement(sql).use { statement ->
+            val zone = runCatching { ZoneId.of(metadata.timezone) }.getOrDefault(ZoneOffset.UTC)
+            statement.setString(1, metadata.clientId)
+            statement.setString(2, metadata.mediaType.name)
+            statement.setObject(3, Instant.ofEpochMilli(metadata.takenAtEpochMs).atZone(zone).toOffsetDateTime())
+            statement.setString(4, metadata.timezone)
+            statement.setNullableDouble(5, metadata.latitude)
+            statement.setNullableDouble(6, metadata.longitude)
+            statement.setNullableDouble(7, metadata.accuracyMeters?.toDouble())
+            statement.setNullableDouble(8, metadata.altitudeMeters)
+            statement.setNullableString(9, metadata.note)
+            statement.setNullableString(10, metadata.userCode)
+            statement.setNullableString(11, metadata.deviceModel)
+            statement.setNullableString(12, metadata.platform)
+            statement.setString(13, storagePath)
+            statement.setLong(14, fileSize)
+            statement.setNullableString(15, originalName)
+            statement.setLong(16, userId)
+            statement.executeQuery().use { rs ->
+                rs.next()
+                rs.getLong(1)
             }
         }
+    }
 
-    fun list(from: LocalDate?, to: LocalDate?, userCode: String?, limit: Int): List<CaptureSummary> =
+    /** Latest captures, optionally filtered by date range (in [reportZone]) and user. */
+    fun list(from: LocalDate?, to: LocalDate?, userId: Long?, limit: Int): List<CaptureSummary> =
         dataSource.connection.use { connection ->
             val conditions = mutableListOf<String>()
             val params = mutableListOf<Any>()
             from?.let {
-                conditions += "taken_at >= ?"
-                params += it.atStartOfDay().atOffset(reportOffset)
+                conditions += "c.taken_at >= ?"
+                params += it.atStartOfDay(reportZone).toOffsetDateTime()
             }
             to?.let {
-                conditions += "taken_at < ?"
-                params += it.plusDays(1).atStartOfDay().atOffset(reportOffset)
+                conditions += "c.taken_at < ?"
+                params += it.plusDays(1).atStartOfDay(reportZone).toOffsetDateTime()
             }
-            userCode?.let {
-                conditions += "user_code = ?"
+            userId?.let {
+                conditions += "c.user_id = ?"
                 params += it
             }
 
             val sql = buildString {
                 append("SELECT TOP (").append(limit.coerceIn(1, 1000)).append(") ")
-                append("id, client_id, media_type, taken_at, latitude, longitude, accuracy_m, note, user_code, ")
-                append("storage_path, file_size, uploaded_at FROM cactivity.capture")
+                append("c.id, c.client_id, c.media_type, c.taken_at, c.latitude, c.longitude, c.accuracy_m, c.note, ")
+                append("c.user_code, u.display_name, c.storage_path, c.file_size, c.uploaded_at ")
+                append("FROM cactivity.capture c LEFT JOIN cactivity.app_user u ON u.id = c.user_id")
                 if (conditions.isNotEmpty()) append(" WHERE ").append(conditions.joinToString(" AND "))
-                append(" ORDER BY taken_at DESC")
+                append(" ORDER BY c.taken_at DESC")
             }
             connection.prepareStatement(sql).use { statement ->
                 params.forEachIndexed { index, value -> statement.setObject(index + 1, value) }
@@ -115,8 +104,6 @@ class CaptureDb(config: ServerConfig) : AutoCloseable {
         }
     }
 
-    override fun close() = dataSource.close()
-
     private fun ResultSet.toCaptureSummary() = CaptureSummary(
         id = getLong("id"),
         clientId = getString("client_id"),
@@ -127,15 +114,9 @@ class CaptureDb(config: ServerConfig) : AutoCloseable {
         accuracyMeters = getNullableDouble("accuracy_m")?.toFloat(),
         note = getString("note"),
         userCode = getString("user_code"),
+        userDisplayName = getString("display_name"),
         storagePath = getString("storage_path"),
         fileSize = getLong("file_size"),
-        // uploaded_at is stored in UTC (SYSUTCDATETIME)
-        uploadedAtEpochMs = getTimestamp("uploaded_at").toLocalDateTime().toInstant(ZoneOffset.UTC).toEpochMilli(),
+        uploadedAtEpochMs = getUtcInstant("uploaded_at")?.toEpochMilli() ?: 0L,
     )
-
-    private fun ResultSet.getNullableDouble(column: String): Double? = getDouble(column).takeIf { !wasNull() }
-
-    private fun PreparedStatement.setNullableDouble(index: Int, value: Double?) {
-        if (value == null) setNull(index, Types.DOUBLE) else setDouble(index, value)
-    }
 }

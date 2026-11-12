@@ -44,7 +44,7 @@ import kotlinx.datetime.TimeZone
 fun GalleryScreen(
     repository: CaptureRepository,
     syncClient: SyncClient,
-    isSyncConfigured: Boolean,
+    onSessionExpired: () -> Unit,
     onBack: () -> Unit,
 ) {
     val strings = LocalStrings.current
@@ -65,21 +65,22 @@ fun GalleryScreen(
                 scope.launch {
                     isSyncing = true
                     val result = syncClient.syncAll()
+                    isSyncing = false
                     resultMessage = when (result.skipped) {
-                        SyncSkipReason.NOT_CONFIGURED -> strings.serverNotConfigured
                         SyncSkipReason.ALREADY_RUNNING -> strings.syncAlreadyRunning
+                        SyncSkipReason.NOT_SIGNED_IN, SyncSkipReason.SESSION_EXPIRED -> {
+                            // The app returns to the sign-in screen; show why there.
+                            onSessionExpired()
+                            strings.sessionExpired
+                        }
                         null -> strings.syncResult(result.uploaded, result.failed)
                     }
-                    isSyncing = false
                 }
             },
             enabled = !isSyncing && pendingCount > 0,
             modifier = Modifier.fillMaxWidth().padding(vertical = 8.dp),
         ) {
             Text(if (isSyncing) strings.syncing else strings.syncButton(pendingCount))
-        }
-        if (!isSyncConfigured) {
-            Text(strings.serverNotConfigured, color = Color(0xFFFFB74D))
         }
         resultMessage?.let { Text(it, style = MaterialTheme.typography.bodySmall) }
         Spacer(Modifier.padding(4.dp))

@@ -25,8 +25,11 @@ dependencies {
     implementation(libs.ktor.server.content.negotiation)
     implementation(libs.ktor.server.call.logging)
     implementation(libs.ktor.server.status.pages)
+    implementation(libs.ktor.server.html.builder)
+    implementation(libs.ktor.server.forwarded.header)
     implementation(libs.ktor.serialization.kotlinx.json)
     implementation(libs.logback.classic)
     implementation(libs.hikaricp)
     implementation(libs.mssql.jdbc)
+    implementation(libs.zxing.core)
 }
