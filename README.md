@@ -120,12 +120,16 @@ The in-app branding comes from the server. To publish a build with your own home
 | `GET` | `/api/v1/captures?from=&to=&userId=&limit=` | Bearer (admin) | List metadata |
 | `GET` | `/api/v1/captures/{id}/file` | Bearer (admin) | Download the original file |
 
+### Device id (matching other in-house apps)
+
+Each capture carries the phone's OS device id: **ANDROID_ID** on Android and **identifierForVendor** on iOS. Android gives every app signed with the **same signing key** the same ANDROID_ID on a phone (per user; it changes after a factory reset), and iOS gives every app from the **same Apple developer team** the same identifierForVendor. Sign this app with the same key/team as your other apps (e.g. attendance) and the ids match, so captures can be joined with their records. With Play App Signing, choose the same app signing key as the other app when enrolling.
+
 ## CI
 
 GitHub Actions (`.github/workflows/ci.yml`):
 
 - **server** (Ubuntu): runs on every push to `main`, pull requests, tags and manual runs; builds the server fat JAR (workflow artifact).
-- **android** (Ubuntu): runs only on manual runs (Actions → CI → Run workflow) or when a tag is pushed; builds the debug APK (workflow artifact).
+- **android** (Ubuntu): runs only on manual runs (Actions → CI → Run workflow) or when a tag is pushed; builds the debug APK, and a signed release APK when these repository secrets exist: `ANDROID_KEYSTORE_BASE64` (the .jks, base64), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
 - **ios** (macOS): runs only on manual runs or when a tag is pushed; builds the iOS app for the Simulator, unsigned.
 
 To build the apps for a release, push a tag, e.g. `git tag v0.1.0 && git push origin v0.1.0`.

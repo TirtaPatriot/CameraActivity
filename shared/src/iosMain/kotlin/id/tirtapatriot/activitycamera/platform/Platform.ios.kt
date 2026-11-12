@@ -10,6 +10,9 @@ actual object PlatformInfo {
     actual val deviceModel: String =
         "${UIDevice.currentDevice.model} (iOS ${UIDevice.currentDevice.systemVersion})"
     actual val videoExtension: String = "mov"
+
+    // Same for all apps of one Apple developer team; changes when all of them are removed from the phone.
+    actual fun systemDeviceId(): String? = UIDevice.currentDevice.identifierForVendor?.UUIDString
 }
 
 actual fun mediaDirectory(): String {

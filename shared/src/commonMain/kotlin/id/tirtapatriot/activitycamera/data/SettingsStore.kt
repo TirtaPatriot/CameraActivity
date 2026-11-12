@@ -5,6 +5,7 @@ import id.tirtapatriot.activitycamera.i18n.AppLanguage
 import id.tirtapatriot.activitycamera.model.AppConfig
 import id.tirtapatriot.activitycamera.model.TaskType
 import id.tirtapatriot.activitycamera.model.UserProfile
+import id.tirtapatriot.activitycamera.platform.PlatformInfo
 import id.tirtapatriot.activitycamera.platform.mediaDirectory
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
@@ -16,7 +17,7 @@ import kotlin.uuid.Uuid
 
 @Serializable
 data class AppSettings(
-    /** Random id made once per install; lets the server group anonymous uploads per phone. */
+    /** Device id sent with every capture: the OS id shared with the other in-house apps, else a random id. */
     val deviceId: String = "",
     /** Base URL of the organization's server, e.g. https://camera.example.org; empty = not connected. */
     val serverUrl: String = "",
@@ -67,7 +68,12 @@ class SettingsStore(baseDir: String = mediaDirectory()) {
         val loaded = load()
         _settings = MutableStateFlow(loaded)
         settings = _settings.asStateFlow()
-        if (loaded.deviceId.isBlank()) update { it.copy(deviceId = Uuid.random().toString()) }
+        // Prefer the OS id so it matches the attendance app; fall back to a random id kept per install.
+        val systemId = runCatching { PlatformInfo.systemDeviceId() }.getOrNull()
+        when {
+            systemId != null && loaded.deviceId != systemId -> update { it.copy(deviceId = systemId) }
+            loaded.deviceId.isBlank() -> update { it.copy(deviceId = Uuid.random().toString()) }
+        }
     }
 
     private fun load(): AppSettings =

@@ -21,6 +21,12 @@ actual object PlatformInfo {
     actual val name: String = "android"
     actual val deviceModel: String = "${Build.MANUFACTURER} ${Build.MODEL} (Android ${Build.VERSION.RELEASE})"
     actual val videoExtension: String = "mp4"
+
+    // Since Android 8 the value is per signing key + user + device; changes after a factory reset.
+    @android.annotation.SuppressLint("HardwareIds")
+    actual fun systemDeviceId(): String? =
+        android.provider.Settings.Secure.getString(AndroidPlatform.appContext.contentResolver, android.provider.Settings.Secure.ANDROID_ID)
+            ?.takeIf { it.isNotBlank() }
 }
 
 actual fun mediaDirectory(): String {

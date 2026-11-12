@@ -8,6 +8,13 @@ expect object PlatformInfo {
     val deviceModel: String
     /** "mp4" on Android (CameraX), "mov" on iOS (AVCaptureMovieFileOutput). */
     val videoExtension: String
+
+    /**
+     * The OS device id shared by all apps signed with the same key (Android ANDROID_ID) or published
+     * by the same Apple team (iOS identifierForVendor) — so it matches the id other in-house apps,
+     * such as attendance, record for this phone. Null when unavailable.
+     */
+    fun systemDeviceId(): String?
 }
 
 /** Local app folder holding photos/videos plus index.json. */

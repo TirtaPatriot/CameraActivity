@@ -160,7 +160,7 @@ fun AccountScreen(
                 }
             }
 
-            Text(strings.deviceId(settings.deviceId.take(8)), fontSize = 12.sp, color = Palette.TextMuted, modifier = Modifier.padding(start = 4.dp))
+            Text(strings.deviceId(settings.deviceId), fontSize = 12.sp, color = Palette.TextMuted, modifier = Modifier.padding(start = 4.dp))
         }
     }
 }
