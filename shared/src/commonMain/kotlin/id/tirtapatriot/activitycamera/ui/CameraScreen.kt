@@ -441,7 +441,8 @@ fun CameraScreen(
             ) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
                     LatestThumb(latest, enabled = !isRecording, onClick = onOpenHistory)
-                    AnimatedVisibility(
+                    // Fully qualified: inside Row → Box, the RowScope overload would be picked and is not allowed here.
+                    androidx.compose.animation.AnimatedVisibility(
                         visible = justCaptured != null && !isRecording,
                         enter = fadeIn() + scaleIn(initialScale = 0.8f),
                         exit = fadeOut() + scaleOut(targetScale = 0.8f),
