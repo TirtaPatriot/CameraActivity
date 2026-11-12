@@ -32,4 +32,5 @@ dependencies {
     implementation(libs.hikaricp)
     implementation(libs.mssql.jdbc)
     implementation(libs.zxing.core)
+    implementation(libs.nimbus.jose.jwt)
 }

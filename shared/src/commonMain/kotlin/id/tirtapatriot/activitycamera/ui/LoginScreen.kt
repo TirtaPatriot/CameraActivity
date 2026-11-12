@@ -2,6 +2,10 @@ package id.tirtapatriot.activitycamera.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.material3.OutlinedButton
+import androidx.compose.ui.unit.sp
+import id.tirtapatriot.activitycamera.auth.SingleSignOn
+import id.tirtapatriot.activitycamera.auth.SsoResult
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.foundation.layout.Column
@@ -68,6 +72,26 @@ fun LoginScreen(
         }
     }
 
+    fun signInSso() {
+        if (isBusy) return
+        scope.launch {
+            isBusy = true
+            error = null
+            try {
+                when (val result = SingleSignOn.signIn(api, settings.serverUrl)) {
+                    is SsoResult.Success -> onSignedIn(result.response.token, result.response.user)
+                    SsoResult.Rejected -> error = strings.ssoRejected
+                    SsoResult.Cancelled -> Unit
+                }
+            } catch (_: Throwable) {
+                error = strings.connectFailed
+            } finally {
+                isBusy = false
+            }
+        }
+    }
+
+    val auth = settings.config.auth
     val anonymousAllowed = settings.config.capture.allowAnonymousUpload && !settings.config.capture.requireSignIn
     Column(
         Modifier.fillMaxSize().background(Palette.Background).safeDrawingPadding().padding(24.dp),
@@ -82,9 +106,49 @@ fun LoginScreen(
             color = MaterialTheme.colorScheme.primary,
         )
         notice?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        if (auth.oidcEnabled) {
+            Button(
+                onClick = ::signInSso,
+                enabled = !isBusy,
+                shape = RoundedCornerShape(14.dp),
+                modifier = Modifier.fillMaxWidth().height(52.dp),
+            ) { Text(auth.oidcLabel ?: strings.signInSso, fontWeight = FontWeight.SemiBold) }
+            if (auth.passwordEnabled) Text(strings.orWithPassword, color = Palette.TextMuted, fontSize = 13.sp)
+        }
+        if (auth.passwordEnabled) PasswordForm(
+            username = username,
+            password = password,
+            isBusy = isBusy,
+            primary = !auth.oidcEnabled,
+            onUsername = { username = it.trim() },
+            onPassword = { password = it },
+            onSubmit = ::signIn,
+        )
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+        TextButton(onClick = onSkip, enabled = !isBusy) {
+            Text(if (anonymousAllowed) strings.skipUseWithoutAccount else strings.laterToCamera, fontWeight = FontWeight.SemiBold)
+        }
+        TextButton(onClick = onChangeServer, enabled = !isBusy) {
+            Text("${strings.changeServer} · ${settings.serverUrl}", color = Palette.TextMuted)
+        }
+    }
+}
+
+@Composable
+private fun PasswordForm(
+    username: String,
+    password: String,
+    isBusy: Boolean,
+    primary: Boolean,
+    onUsername: (String) -> Unit,
+    onPassword: (String) -> Unit,
+    onSubmit: () -> Unit,
+) {
+    val strings = LocalStrings.current
+    Column(Modifier.fillMaxWidth(), verticalArrangement = Arrangement.spacedBy(14.dp)) {
         OutlinedTextField(
             value = username,
-            onValueChange = { username = it.trim() },
+            onValueChange = onUsername,
             label = { Text(strings.username) },
             singleLine = true,
             enabled = !isBusy,
@@ -92,7 +156,7 @@ fun LoginScreen(
         )
         OutlinedTextField(
             value = password,
-            onValueChange = { password = it },
+            onValueChange = onPassword,
             label = { Text(strings.password) },
             singleLine = true,
             enabled = !isBusy,
@@ -100,18 +164,16 @@ fun LoginScreen(
             keyboardOptions = KeyboardOptions(keyboardType = KeyboardType.Password),
             modifier = Modifier.fillMaxWidth(),
         )
-        Button(
-            onClick = ::signIn,
-            enabled = !isBusy && username.isNotBlank() && password.isNotEmpty(),
-            shape = RoundedCornerShape(14.dp),
-            modifier = Modifier.fillMaxWidth().height(50.dp),
-        ) { Text(if (isBusy) strings.signingIn else strings.signIn, fontWeight = FontWeight.SemiBold) }
-        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
-        TextButton(onClick = onSkip, enabled = !isBusy) {
-            Text(if (anonymousAllowed) strings.skipUseWithoutAccount else strings.laterToCamera, fontWeight = FontWeight.SemiBold)
-        }
-        TextButton(onClick = onChangeServer, enabled = !isBusy) {
-            Text("${strings.changeServer} · ${settings.serverUrl}", color = Palette.TextMuted)
+        val enabled = !isBusy && username.isNotBlank() && password.isNotEmpty()
+        val label = if (isBusy) strings.signingIn else strings.signIn
+        if (primary) {
+            Button(onClick = onSubmit, enabled = enabled, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                Text(label, fontWeight = FontWeight.SemiBold)
+            }
+        } else {
+            OutlinedButton(onClick = onSubmit, enabled = enabled, shape = RoundedCornerShape(14.dp), modifier = Modifier.fillMaxWidth().height(50.dp)) {
+                Text(label, fontWeight = FontWeight.SemiBold)
+            }
         }
     }
 }

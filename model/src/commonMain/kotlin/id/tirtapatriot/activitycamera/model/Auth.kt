@@ -28,3 +28,10 @@ data class LoginResponse(
     val token: String,
     val user: UserProfile,
 )
+
+/** The app proves it started the sign-on (PKCE): SHA-256 of [codeVerifier] was sent to [ApiContract.OIDC_START]. */
+@Serializable
+data class OidcTokenRequest(
+    val code: String,
+    val codeVerifier: String,
+)

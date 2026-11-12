@@ -50,6 +50,7 @@ kotlin {
             implementation(libs.androidx.camera.video)
             implementation(libs.androidx.camera.view)
             implementation(libs.androidx.work.runtime)
+            implementation(libs.androidx.browser)
             implementation(libs.play.services.location)
             implementation(libs.zxing.core)
         }

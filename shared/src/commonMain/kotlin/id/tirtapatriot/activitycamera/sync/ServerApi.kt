@@ -5,6 +5,7 @@ import id.tirtapatriot.activitycamera.model.AppConfig
 import id.tirtapatriot.activitycamera.model.ConnectPayload
 import id.tirtapatriot.activitycamera.model.LoginRequest
 import id.tirtapatriot.activitycamera.model.LoginResponse
+import id.tirtapatriot.activitycamera.model.OidcTokenRequest
 import io.ktor.client.HttpClient
 import io.ktor.client.call.body
 import io.ktor.client.plugins.HttpTimeout
@@ -17,6 +18,7 @@ import io.ktor.client.statement.readRawBytes
 import io.ktor.http.ContentType
 import io.ktor.http.HttpStatusCode
 import io.ktor.http.contentType
+import io.ktor.http.encodeURLParameter
 import io.ktor.http.isSuccess
 import io.ktor.serialization.kotlinx.json.json
 import kotlinx.serialization.json.Json
@@ -53,6 +55,23 @@ class ServerApi {
         val response = http.post(serverUrl + ApiContract.LOGIN) {
             contentType(ContentType.Application.Json)
             setBody(LoginRequest(username.trim().lowercase(), password, deviceName))
+        }
+        if (response.status == HttpStatusCode.Unauthorized) return null
+        check(response.status.isSuccess()) { "HTTP ${response.status.value}" }
+        return response.body()
+    }
+
+    /** Page to open in the browser to start single sign-on (PKCE: only the challenge leaves the phone). */
+    fun oidcStartUrl(serverUrl: String, state: String, codeChallenge: String, deviceName: String): String =
+        serverUrl + ApiContract.OIDC_START + "?client=mobile&state=" + state.encodeURLParameter() +
+            "&code_challenge=" + codeChallenge.encodeURLParameter() + "&code_challenge_method=S256" +
+            "&device=" + deviceName.encodeURLParameter()
+
+    /** Trades the one-time code from the browser for a bearer token; null when it is rejected. */
+    suspend fun exchangeOidcCode(serverUrl: String, code: String, codeVerifier: String): LoginResponse? {
+        val response = http.post(serverUrl + ApiContract.OIDC_TOKEN) {
+            contentType(ContentType.Application.Json)
+            setBody(OidcTokenRequest(code, codeVerifier))
         }
         if (response.status == HttpStatusCode.Unauthorized) return null
         check(response.status.isSuccess()) { "HTTP ${response.status.value}" }

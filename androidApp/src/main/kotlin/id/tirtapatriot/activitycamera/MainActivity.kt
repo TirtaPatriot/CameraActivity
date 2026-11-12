@@ -1,6 +1,7 @@
 package id.tirtapatriot.activitycamera
 
 import android.Manifest
+import android.content.Intent
 import android.content.pm.PackageManager
 import android.os.Bundle
 import androidx.activity.ComponentActivity
@@ -11,6 +12,7 @@ import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.setValue
 import androidx.core.content.ContextCompat
+import id.tirtapatriot.activitycamera.auth.AuthBrowser
 import id.tirtapatriot.activitycamera.platform.AndroidPlatform
 import id.tirtapatriot.activitycamera.ui.App
 
@@ -33,6 +35,8 @@ class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         AndroidPlatform.init(applicationContext)
+        AuthBrowser.attach(this)
+        AuthBrowser.onIntent(intent)
         enableEdgeToEdge()
 
         isCameraGranted = isGranted(Manifest.permission.CAMERA)
@@ -44,6 +48,21 @@ class MainActivity : ComponentActivity() {
                 onRequestPermissions = { permissionLauncher.launch(requiredPermissions) },
             )
         }
+    }
+
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        AuthBrowser.onIntent(intent)
+    }
+
+    override fun onPause() {
+        super.onPause()
+        AuthBrowser.onPaused()
+    }
+
+    override fun onResume() {
+        super.onResume()
+        AuthBrowser.onResumed()
     }
 
     private fun isGranted(permission: String) =

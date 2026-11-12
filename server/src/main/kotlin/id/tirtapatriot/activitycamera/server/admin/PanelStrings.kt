@@ -22,6 +22,10 @@ class PanelStrings(val language: String) {
     val password get() = t("Kata sandi", "Password")
     val signIn get() = t("Masuk", "Sign in")
     val loginFailed get() = t("Nama pengguna atau kata sandi salah.", "Wrong username or password.")
+    val signInSso get() = t("Masuk dengan SSO", "Sign in with SSO")
+    val orLocalAccount get() = t("atau dengan akun lokal:", "or with a local account:")
+    val ssoFailed get() = t("Masuk lewat SSO gagal atau akun dinonaktifkan.", "SSO sign-in failed or the account is disabled.")
+    val ssoNotAdmin get() = t("Akun SSO ini bukan admin.", "This SSO account is not an admin.")
 
     // Captures
     val capturesTitle get() = t("Tangkapan terbaru", "Latest captures")
@@ -124,6 +128,11 @@ class PanelStrings(val language: String) {
     val allowAnonymousUpload get() = t("Izinkan unggah tanpa akun (dicatat per perangkat)", "Allow uploads without an account (recorded per device)")
     val requireSignIn get() = t("Wajib masuk sebelum foto dikirim ke server", "Require sign-in before captures are uploaded")
     val requireTask get() = t("Wajib pilih tugas sebelum memotret", "Require a task before taking a photo")
+    val allowPasswordSignIn get() = t("Petugas boleh masuk dengan kata sandi (akun lokal)", "Officers may sign in with a password (local accounts)")
+    val allowPasswordSignInHint get() = t(
+        "SSO aktif. Matikan ini agar petugas hanya masuk lewat SSO. Admin tetap bisa masuk panel dengan kata sandi untuk keadaan darurat.",
+        "SSO is on. Turn this off so officers sign in through SSO only. Admins can still use a password for the panel in an emergency.",
+    )
     val allowPhoto get() = t("Izinkan foto", "Allow photos")
     val allowVideo get() = t("Izinkan video", "Allow videos")
     val requireLocation get() = t("Wajib ada lokasi GPS", "Require GPS location")

@@ -50,6 +50,9 @@ interface Strings {
     val changeServer: String
     val sessionExpired: String
     val skipUseWithoutAccount: String
+    val signInSso: String
+    val orWithPassword: String
+    val ssoRejected: String
 
     // Camera
     val modePhoto: String
@@ -169,6 +172,9 @@ object IndonesianStrings : Strings {
     override val changeServer = "Ganti server"
     override val sessionExpired = "Sesi berakhir. Silakan masuk lagi."
     override val skipUseWithoutAccount = "Lewati, pakai tanpa akun"
+    override val signInSso = "Masuk dengan SSO"
+    override val orWithPassword = "atau dengan nama pengguna & kata sandi"
+    override val ssoRejected = "Masuk lewat SSO gagal, atau akun Anda dinonaktifkan admin."
 
     override val modePhoto = "Foto"
     override val modeVideo = "Video"
@@ -291,6 +297,9 @@ object EnglishStrings : Strings {
     override val changeServer = "Change server"
     override val sessionExpired = "Your session ended. Please sign in again."
     override val skipUseWithoutAccount = "Skip, use without an account"
+    override val signInSso = "Sign in with SSO"
+    override val orWithPassword = "or with username & password"
+    override val ssoRejected = "SSO sign-in failed, or your account was disabled by the admin."
 
     override val modePhoto = "Photo"
     override val modeVideo = "Video"

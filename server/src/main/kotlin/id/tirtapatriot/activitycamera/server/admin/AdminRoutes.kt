@@ -1,5 +1,6 @@
 package id.tirtapatriot.activitycamera.server.admin
 
+import id.tirtapatriot.activitycamera.model.ApiContract
 import id.tirtapatriot.activitycamera.model.Branding
 import id.tirtapatriot.activitycamera.model.CapturePolicy
 import id.tirtapatriot.activitycamera.model.ConnectPayload
@@ -9,6 +10,7 @@ import id.tirtapatriot.activitycamera.model.UserRole
 import id.tirtapatriot.activitycamera.server.AuthService
 import id.tirtapatriot.activitycamera.server.PasswordHasher
 import id.tirtapatriot.activitycamera.server.ServerDeps
+import id.tirtapatriot.activitycamera.server.publicBaseUrl
 import id.tirtapatriot.activitycamera.server.TaskDb
 import id.tirtapatriot.activitycamera.server.UserRecord
 import id.tirtapatriot.activitycamera.server.blocking
@@ -78,16 +80,7 @@ private fun ApplicationCall.strings() = PanelStrings(request.cookies[LANG_COOKIE
 
 private fun ApplicationCall.isHttps() = request.origin.scheme == "https"
 
-/** Base URL the phones should use, e.g. https://camera.example.org */
-private fun ApplicationCall.publicBaseUrl(deps: ServerDeps): String {
-    deps.config.publicUrl?.let { return it }
-    val origin = request.origin
-    val defaultPort = (origin.scheme == "https" && origin.serverPort == 443) || (origin.scheme == "http" && origin.serverPort == 80)
-    return buildString {
-        append(origin.scheme).append("://").append(origin.serverHost)
-        if (!defaultPort) append(':').append(origin.serverPort)
-    }
-}
+private fun ApplicationCall.publicBaseUrl(deps: ServerDeps): String = publicBaseUrl(deps.config)
 
 /** Signed-in admin, or null after redirecting to the login page. */
 private suspend fun RoutingContext.panelAdmin(deps: ServerDeps): UserRecord? {
@@ -111,14 +104,20 @@ fun Route.adminRoutes(deps: ServerDeps) {
 
         // ---- Sign in / out -------------------------------------------------
         get("/login") {
-            call.loginPage(deps, error = false)
+            val s = call.strings()
+            val message = when (call.request.queryParameters["sso"]) {
+                "failed" -> s.ssoFailed
+                "notadmin" -> s.ssoNotAdmin
+                else -> null
+            }
+            call.loginPage(deps, error = message)
         }
 
         post("/login") {
             val form = call.receiveParameters()
             val token = deps.auth.loginPanel(form["username"].orEmpty(), form["password"].orEmpty())
             if (token == null) {
-                call.loginPage(deps, error = true)
+                call.loginPage(deps, error = call.strings().loginFailed)
                 return@post
             }
             call.response.cookies.append(
@@ -419,6 +418,7 @@ fun Route.adminRoutes(deps: ServerDeps) {
                 allowAnonymousUpload = form.flag("allowAnonymousUpload"),
                 requireSignIn = form.flag("requireSignIn"),
                 requireTask = form.flag("requireTask"),
+                allowPasswordSignIn = form.flag("allowPasswordSignIn"),
                 requireLocation = form.flag("requireLocation"),
                 recordAudio = form.flag("recordAudio"),
                 maxVideoSeconds = form["maxVideoSeconds"]?.toIntOrNull() ?: -1,
@@ -450,14 +450,21 @@ fun Route.adminRoutes(deps: ServerDeps) {
 
 // ---- Pages that are re-rendered with validation messages ------------------
 
-private suspend fun ApplicationCall.loginPage(deps: ServerDeps, error: Boolean) {
+private suspend fun ApplicationCall.loginPage(deps: ServerDeps, error: String?) {
     val s = strings()
     respondPanel(
         s, deps.branding(), s.loginTitle, section = null, signedIn = false,
-        status = if (error) HttpStatusCode.Unauthorized else HttpStatusCode.OK,
+        status = if (error != null) HttpStatusCode.Unauthorized else HttpStatusCode.OK,
     ) {
         div("card login") {
-            if (error) flash(s.loginFailed, isError = true)
+            flash(error, isError = true)
+            deps.oidc?.let { oidc ->
+                a(href = ApiContract.OIDC_START, classes = "button") {
+                    attributes["style"] = "display:block;text-align:center;padding:10px;margin-bottom:16px"
+                    +(oidc.buttonLabel ?: s.signInSso)
+                }
+                p("muted") { +s.orLocalAccount }
+            }
             form(action = "/admin/login", method = FormMethod.post) {
                 label { +s.username; textInput(name = "username") { required = true; attributes["autocomplete"] = "username" } }
                 label { +s.password; passwordInput(name = "password") { required = true; attributes["autocomplete"] = "current-password" } }
@@ -485,7 +492,10 @@ private suspend fun ApplicationCall.usersPage(deps: ServerDeps, message: String?
                 tbody {
                     users.forEach { user ->
                         tr {
-                            td { code { +user.username } }
+                            td {
+                                code { +user.username }
+                                if (user.isSsoLinked) { +" "; span("badge") { +"SSO" } }
+                            }
                             td {
                                 form(action = "/admin/users/${user.id}", method = FormMethod.post) {
                                     textInput(name = "displayName") { value = user.displayName; required = true }
@@ -642,6 +652,10 @@ private suspend fun ApplicationCall.policyPage(deps: ServerDeps, message: String
             checkbox("allowAnonymousUpload", s.allowAnonymousUpload, policy.allowAnonymousUpload)
             checkbox("requireSignIn", s.requireSignIn, policy.requireSignIn)
             checkbox("requireTask", s.requireTask, policy.requireTask)
+            if (deps.oidc != null) {
+                checkbox("allowPasswordSignIn", s.allowPasswordSignIn, policy.allowPasswordSignIn)
+                p("muted") { +s.allowPasswordSignInHint }
+            }
             h2 { +s.policyTitle }
             checkbox("allowPhoto", s.allowPhoto, policy.allowPhoto)
             checkbox("allowVideo", s.allowVideo, policy.allowVideo)

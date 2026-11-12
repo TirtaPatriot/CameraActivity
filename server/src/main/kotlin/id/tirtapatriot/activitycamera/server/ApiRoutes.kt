@@ -1,6 +1,7 @@
 package id.tirtapatriot.activitycamera.server
 
 import id.tirtapatriot.activitycamera.model.ApiContract
+import id.tirtapatriot.activitycamera.model.AuthOptions
 import id.tirtapatriot.activitycamera.model.CaptureMetadata
 import id.tirtapatriot.activitycamera.model.ErrorResponse
 import id.tirtapatriot.activitycamera.model.LoginRequest
@@ -43,7 +44,12 @@ class ServerDeps(
     val settings: SettingsRepository,
     val tasks: TaskDb,
     val auth: AuthService,
-)
+    /** Null when single sign-on is not configured. */
+    val oidc: OidcService?,
+) {
+    /** Password sign-in stays on when there is no SSO, otherwise nobody could sign in. */
+    suspend fun passwordSignInAllowed(): Boolean = oidc == null || blocking { settings.appConfig().capture.allowPasswordSignIn }
+}
 
 private suspend fun RoutingContext.requireUser(deps: ServerDeps): UserRecord? {
     val user = deps.auth.userFromBearer(call)
@@ -85,7 +91,16 @@ fun Route.apiRoutes(deps: ServerDeps) {
 
     // Public: branding + capture policy, needed before sign-in (login screen shows the branding).
     get(ApiContract.CONFIG) {
-        call.respond(blocking { deps.settings.appConfig() })
+        val config = blocking { deps.settings.appConfig() }
+        call.respond(
+            config.copy(
+                auth = AuthOptions(
+                    oidcEnabled = deps.oidc != null,
+                    oidcLabel = deps.oidc?.buttonLabel,
+                    passwordEnabled = deps.passwordSignInAllowed(),
+                ),
+            ),
+        )
     }
 
     get(ApiContract.LOGO) {
@@ -101,6 +116,9 @@ fun Route.apiRoutes(deps: ServerDeps) {
 
     post(ApiContract.LOGIN) {
         val request = call.receive<LoginRequest>()
+        if (!deps.passwordSignInAllowed()) {
+            return@post call.respond(HttpStatusCode.Forbidden, ErrorResponse("Use single sign-on"))
+        }
         val result = deps.auth.loginMobile(request.username, request.password, request.deviceName)
             ?: return@post call.respond(HttpStatusCode.Unauthorized, ErrorResponse("Invalid username or password"))
         val (token, user) = result

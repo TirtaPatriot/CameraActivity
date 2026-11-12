@@ -81,6 +81,19 @@ object ApiContract {
     const val LOGO = "/api/v1/branding/logo"
     const val LOGIN = "/api/v1/auth/login"
     const val LOGOUT = "/api/v1/auth/logout"
+
+    /** Opened in the phone's browser: starts single sign-on (OIDC) through the server. */
+    const val OIDC_START = "/auth/oidc/start"
+
+    /** Callback registered at the identity provider (Casdoor, Keycloak, …). */
+    const val OIDC_CALLBACK = "/auth/oidc/callback"
+
+    /** POST [OidcTokenRequest]: exchanges the one-time code from the browser for a bearer token. */
+    const val OIDC_TOKEN = "/api/v1/auth/oidc/token"
+
+    /** Where the server sends the browser back to the app after single sign-on. */
+    const val OIDC_APP_SCHEME = "id.tirtapatriot.activitycamera"
+    const val OIDC_APP_REDIRECT = "$OIDC_APP_SCHEME://oidc"
     const val ME = "/api/v1/me"
     const val CAPTURES = "/api/v1/captures"
     const val PART_METADATA = "metadata"

@@ -45,6 +45,7 @@ fun Application.module(config: ServerConfig) {
         settings = SettingsRepository(database.dataSource, tasks),
         tasks = tasks,
         auth = AuthService(users),
+        oidc = config.oidc?.let(::OidcService),
     )
 
     // Behind Traefik/Dokploy: trust X-Forwarded-Proto/Host for the real scheme and host.
@@ -74,6 +75,7 @@ fun Application.module(config: ServerConfig) {
         get("/") { call.respondRedirect("/admin") }
         get("/health") { call.respondText("ok") }
         apiRoutes(deps)
+        oidcRoutes(deps)
         adminRoutes(deps)
     }
 }

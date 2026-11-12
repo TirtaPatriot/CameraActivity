@@ -51,6 +51,7 @@ Requirements: Docker (or JDK 17+), SQL Server, and a writable folder for files (
    - `server/sql/001_init.sql`
    - `server/sql/002_accounts_settings.sql`
    - `server/sql/003_tasks_anonymous.sql`
+   - `server/sql/004_oidc.sql`
 2. Configure the environment (see `server/.env.example`):
 
    | Variable | Meaning |
@@ -79,6 +80,16 @@ Requirements: Docker (or JDK 17+), SQL Server, and a writable folder for files (
 
 Put the server behind HTTPS (e.g. Traefik/Dokploy); it honours `X-Forwarded-Proto/Host`. The server refuses to start if the storage folder is not writable, the database is unreachable, or no admin exists and `ADMIN_*` is not set.
 
+### Single sign-on (OpenID Connect)
+
+Officers and admins can sign in through the organization's identity provider — any OpenID Connect provider (Casdoor, Keycloak, Authentik, Google Workspace, Microsoft Entra, …). The server is the OIDC client (authorization code + PKCE, client secret stays on the server); the app opens the system browser (Custom Tabs / ASWebAuthenticationSession, so an existing SSO session is reused) and receives a one-time code bound to the app with PKCE, which it exchanges for the server's own token.
+
+1. At the provider, create an application (confidential client, grant type *authorization code*) with redirect URI `<PUBLIC_URL>/auth/oidc/callback`. For Casdoor: *Applications → Add*, copy the client ID and secret.
+2. Set `PUBLIC_URL`, `OIDC_DISCOVERY_URL` (e.g. `https://sso.example.org/.well-known/openid-configuration`), `OIDC_CLIENT_ID`, `OIDC_CLIENT_SECRET`.
+3. Optional: `OIDC_USER_CODE_CLAIM` (employee ID / NIP claim, dotted path allowed), `OIDC_ADMIN_GROUP` (+ `OIDC_GROUPS_CLAIM`), `OIDC_BUTTON_LABEL`.
+
+On the first SSO sign-in an account is linked by the provider's `sub`: to an existing panel account with the same employee ID, or a new officer account. Name, employee ID and (with `OIDC_ADMIN_GROUP`) role follow the provider on every sign-in; disabling the account in the panel still blocks it. With SSO on, *Rules → Officers may sign in with a password* can be turned off; admins can always use a password for the panel (emergency access).
+
 ## Building the app
 
 - **Android**: `./gradlew :androidApp:installDebug`
@@ -100,6 +111,9 @@ The in-app branding comes from the server. To publish a build with your own home
 | `GET` | `/api/v1/branding/logo?v=<version>` | — | Organization logo |
 | `POST` | `/api/v1/auth/login` | — | `{username, password, deviceName}` → `{token, user}` |
 | `POST` | `/api/v1/auth/logout` | Bearer | Revokes the token |
+| `GET` | `/auth/oidc/start` | — | Starts SSO (panel, or `?client=mobile&state=&code_challenge=&code_challenge_method=S256` for the app) |
+| `GET` | `/auth/oidc/callback` | — | Redirect URI registered at the provider |
+| `POST` | `/api/v1/auth/oidc/token` | — | `{code, codeVerifier}` → `{token, user}` |
 | `GET` | `/api/v1/me` | Bearer | Signed-in account |
 | `POST` | `/api/v1/captures` | Bearer, or none when anonymous uploads are allowed | Multipart upload: `metadata` (JSON) + `file` |
 | `POST` | `/api/v1/captures/{clientId}/shared` | Same as upload | `{sharedAtEpochMs}` — capture shared after it was uploaded |

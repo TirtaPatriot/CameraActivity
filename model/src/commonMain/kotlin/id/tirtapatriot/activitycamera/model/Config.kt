@@ -36,6 +36,8 @@ data class CapturePolicy(
     val requireSignIn: Boolean = false,
     /** When true a task must be picked before taking a photo. */
     val requireTask: Boolean = false,
+    /** Officers may sign in with a username + password (accounts made in the panel). Admins always can, in the panel. */
+    val allowPasswordSignIn: Boolean = true,
     val requireLocation: Boolean = false,
     val recordAudio: Boolean = true,
     val maxVideoSeconds: Int = 120,
@@ -58,6 +60,17 @@ data class AppConfig(
     val branding: Branding = Branding(),
     val capture: CapturePolicy = CapturePolicy(),
     val tasks: List<TaskType> = emptyList(),
+    val auth: AuthOptions = AuthOptions(),
+)
+
+/** How officers can sign in; filled by the server from its configuration. */
+@Serializable
+data class AuthOptions(
+    /** Single sign-on through the organization's OIDC provider is configured on the server. */
+    val oidcEnabled: Boolean = false,
+    /** Label for the SSO button, e.g. "Masuk dengan SSO Tirta Patriot"; null = app default. */
+    val oidcLabel: String? = null,
+    val passwordEnabled: Boolean = true,
 )
 
 /** Content of the connect QR code shown in the admin panel. */

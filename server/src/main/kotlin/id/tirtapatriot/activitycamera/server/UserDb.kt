@@ -14,16 +14,22 @@ data class UserRecord(
     val displayName: String,
     val userCode: String?,
     val role: UserRole,
-    val passwordHash: String,
+    /** Null for accounts that only sign in through SSO. */
+    val passwordHash: String?,
     val isActive: Boolean,
+    /** Linked identity at the OIDC provider, if any. */
+    val oidcIssuer: String? = null,
+    val oidcSubject: String? = null,
 ) {
+    val isSsoLinked: Boolean get() = oidcSubject != null
+
     fun toProfile() = UserProfile(id, username, displayName, userCode, role)
 }
 
 /** Accounts (cactivity.app_user) and login tokens (cactivity.auth_token). */
 class UserDb(private val dataSource: DataSource) {
 
-    private val userColumns = "u.id, u.username, u.display_name, u.user_code, u.role, u.password_hash, u.is_active"
+    private val userColumns = "u.id, u.username, u.display_name, u.user_code, u.role, u.password_hash, u.is_active, u.oidc_issuer, u.oidc_subject"
 
     fun countActiveAdmins(): Int = dataSource.connection.use { connection ->
         connection.prepareStatement(
@@ -44,6 +50,63 @@ class UserDb(private val dataSource: DataSource) {
             statement.executeQuery().use { rs -> if (rs.next()) rs.toUser() else null }
         }
     }
+
+    fun findByOidc(issuer: String, subject: String): UserRecord? = dataSource.connection.use { connection ->
+        connection.prepareStatement(
+            "SELECT $userColumns FROM cactivity.app_user u WHERE u.oidc_issuer = ? AND u.oidc_subject = ?",
+        ).use { statement ->
+            statement.setString(1, issuer)
+            statement.setString(2, subject)
+            statement.executeQuery().use { rs -> if (rs.next()) rs.toUser() else null }
+        }
+    }
+
+    /** An account made in the panel with this employee ID that is not linked to SSO yet (only when unique). */
+    fun findUnlinkedByUserCode(userCode: String): UserRecord? = dataSource.connection.use { connection ->
+        connection.prepareStatement(
+            "SELECT TOP (2) $userColumns FROM cactivity.app_user u WHERE u.user_code = ? AND u.oidc_subject IS NULL",
+        ).use { statement ->
+            statement.setString(1, userCode)
+            statement.executeQuery().use { rs ->
+                val found = buildList { while (rs.next()) add(rs.toUser()) }
+                found.singleOrNull()
+            }
+        }
+    }
+
+    fun usernameExists(username: String): Boolean = findByUsername(username) != null
+
+    fun linkOidc(id: Long, issuer: String, subject: String) {
+        dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                "UPDATE cactivity.app_user SET oidc_issuer = ?, oidc_subject = ?, updated_at = SYSUTCDATETIME() WHERE id = ?",
+            ).use { statement ->
+                statement.setString(1, issuer)
+                statement.setString(2, subject)
+                statement.setLong(3, id)
+                statement.executeUpdate()
+            }
+        }
+    }
+
+    /** New account from a first SSO sign-in; it has no password. */
+    fun createOidc(username: String, displayName: String, userCode: String?, role: UserRole, issuer: String, subject: String): Long =
+        dataSource.connection.use { connection ->
+            connection.prepareStatement(
+                """
+                INSERT INTO cactivity.app_user (username, display_name, user_code, role, password_hash, oidc_issuer, oidc_subject)
+                OUTPUT INSERTED.id VALUES (?, ?, ?, ?, NULL, ?, ?)
+                """.trimIndent(),
+            ).use { statement ->
+                statement.setString(1, username)
+                statement.setString(2, displayName)
+                statement.setNullableString(3, userCode)
+                statement.setString(4, role.name)
+                statement.setString(5, issuer)
+                statement.setString(6, subject)
+                statement.executeQuery().use { rs -> rs.next(); rs.getLong(1) }
+            }
+        }
 
     fun list(): List<UserRecord> = dataSource.connection.use { connection ->
         connection.prepareStatement(
@@ -186,5 +249,7 @@ class UserDb(private val dataSource: DataSource) {
         role = UserRole.valueOf(getString("role")),
         passwordHash = getString("password_hash"),
         isActive = getBoolean("is_active"),
+        oidcIssuer = getString("oidc_issuer"),
+        oidcSubject = getString("oidc_subject"),
     )
 }
