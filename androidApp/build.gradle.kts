@@ -28,7 +28,7 @@ android {
             create("release") {
                 storeFile = file(releaseKeystore)
                 storePassword = env("ANDROID_KEYSTORE_PASSWORD")
-                keyAlias = env("ANDROID_KEY_ALIAS")
+                keyAlias = resolveKeyAlias(file(releaseKeystore), env("ANDROID_KEYSTORE_PASSWORD"), env("ANDROID_KEY_ALIAS"))
                 // Optional: most keystores use the same password for the key.
                 keyPassword = env("ANDROID_KEY_PASSWORD") ?: env("ANDROID_KEYSTORE_PASSWORD")
             }
@@ -63,4 +63,26 @@ kotlin {
 dependencies {
     implementation(projects.shared)
     implementation(libs.androidx.activity.compose)
+}
+
+/**
+ * The configured alias when it exists in the keystore; otherwise the only key in it.
+ * Lists the aliases in the build log when it cannot decide, to help fix the ANDROID_KEY_ALIAS secret.
+ */
+fun resolveKeyAlias(keystore: File, password: String?, configured: String?): String? {
+    val aliases = runCatching {
+        val store = java.security.KeyStore.getInstance(java.security.KeyStore.getDefaultType())
+        keystore.inputStream().use { store.load(it, password?.toCharArray()) }
+        store.aliases().toList().filter { store.isKeyEntry(it) }
+    }.getOrElse {
+        logger.warn("Could not read the release keystore: ${it.message}")
+        return configured
+    }
+    configured?.let { wanted -> aliases.firstOrNull { it.equals(wanted, ignoreCase = true) }?.let { return it } }
+    if (aliases.size == 1) {
+        logger.warn("ANDROID_KEY_ALIAS not found in the keystore; using its only key '${aliases.single()}'.")
+        return aliases.single()
+    }
+    logger.error("ANDROID_KEY_ALIAS not found. Keys in the keystore: ${aliases.joinToString()}")
+    return configured
 }
