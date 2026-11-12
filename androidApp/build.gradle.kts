@@ -19,14 +19,17 @@ android {
     }
     // Release key from the environment (CI secrets). Use the same key as the other in-house apps
     // (e.g. attendance) so Android gives them the same ANDROID_ID on a phone.
-    val releaseKeystore = System.getenv("ANDROID_KEYSTORE_PATH")?.takeIf { file(it).exists() }
+    // Unset secrets arrive in CI as empty strings, so treat blank as missing.
+    fun env(name: String) = System.getenv(name)?.takeIf { it.isNotBlank() }
+    val releaseKeystore = env("ANDROID_KEYSTORE_PATH")?.takeIf { file(it).exists() }
     signingConfigs {
         if (releaseKeystore != null) {
             create("release") {
                 storeFile = file(releaseKeystore)
-                storePassword = System.getenv("ANDROID_KEYSTORE_PASSWORD")
-                keyAlias = System.getenv("ANDROID_KEY_ALIAS")
-                keyPassword = System.getenv("ANDROID_KEY_PASSWORD") ?: System.getenv("ANDROID_KEYSTORE_PASSWORD")
+                storePassword = env("ANDROID_KEYSTORE_PASSWORD")
+                keyAlias = env("ANDROID_KEY_ALIAS")
+                // Optional: most keystores use the same password for the key.
+                keyPassword = env("ANDROID_KEY_PASSWORD") ?: env("ANDROID_KEYSTORE_PASSWORD")
             }
         }
     }

@@ -129,7 +129,7 @@ Each capture carries the phone's OS device id: **ANDROID_ID** on Android and **i
 GitHub Actions (`.github/workflows/ci.yml`):
 
 - **server** (Ubuntu): runs on every push to `main`, pull requests, tags and manual runs; builds the server fat JAR (workflow artifact).
-- **android** (Ubuntu): runs only on manual runs (Actions → CI → Run workflow) or when a tag is pushed; builds the debug APK, and a signed release APK when these repository secrets exist: `ANDROID_KEYSTORE_BASE64` (the .jks, base64), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, `ANDROID_KEY_PASSWORD`.
+- **android** (Ubuntu): runs only on manual runs (Actions → CI → Run workflow) or when a tag is pushed; builds the debug APK, and a signed release APK when these repository secrets exist: `ANDROID_KEYSTORE_BASE64` (the .jks, base64), `ANDROID_KEYSTORE_PASSWORD`, `ANDROID_KEY_ALIAS`, and optionally `ANDROID_KEY_PASSWORD` (defaults to the keystore password).
 - **ios** (macOS): runs only on manual runs or when a tag is pushed; builds the iOS app for the Simulator, unsigned.
 
 To build the apps for a release, push a tag, e.g. `git tag v0.1.0 && git push origin v0.1.0`.
