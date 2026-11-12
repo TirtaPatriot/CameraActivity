@@ -5,6 +5,7 @@ import io.ktor.http.HttpStatusCode
 import io.ktor.server.application.ApplicationCall
 import io.ktor.server.html.respondHtml
 import kotlinx.html.ButtonType
+import kotlinx.html.FlowContent
 import kotlinx.html.FormMethod
 import kotlinx.html.MAIN
 import kotlinx.html.a
@@ -132,7 +133,7 @@ private fun kotlinx.html.NAV.navLink(target: PanelSection, label: String, curren
     a(href = target.path, classes = if (target == current) "active" else null) { +label }
 }
 
-fun MAIN.flash(message: String?, isError: Boolean = false) {
+fun FlowContent.flash(message: String?, isError: Boolean = false) {
     if (message.isNullOrBlank()) return
     div(if (isError) "flash error" else "flash") { +message }
 }

@@ -136,7 +136,7 @@ fun Route.adminRoutes(deps: ServerDeps) {
 
         post("/logout") {
             call.request.cookies[PANEL_COOKIE]?.let { deps.auth.revoke(it) }
-            call.response.cookies.appendExpired(PANEL_COOKIE, path = "/admin")
+            call.response.cookies.append(Cookie(name = PANEL_COOKIE, value = "", path = "/admin", maxAge = 0, httpOnly = true))
             call.respondRedirect("/admin/login")
         }
 
