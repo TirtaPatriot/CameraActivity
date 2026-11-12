@@ -96,9 +96,12 @@ then add the launcher label (`androidApp/src/main/res/values-xx/strings.xml`) an
 
 ## CI
 
-GitHub Actions (`.github/workflows/ci.yml`) runs on every push to `main` and on pull requests:
+GitHub Actions (`.github/workflows/ci.yml`):
 
-- **android-and-server** (Ubuntu): builds the debug APK and the server fat JAR, uploaded as workflow artifacts.
-- **ios** (macOS): builds the shared framework and the iOS app for the Simulator, unsigned.
+- **server** (Ubuntu): runs on every push to `main`, pull requests, tags and manual runs; builds the server fat JAR (workflow artifact).
+- **android** (Ubuntu): runs only on manual runs (Actions → CI → Run workflow) or when a tag is pushed; builds the debug APK (workflow artifact).
+- **ios** (macOS): runs only on manual runs or when a tag is pushed; builds the iOS app for the Simulator, unsigned.
+
+To build the apps for a release, push a tag, e.g. `git tag v0.1.0 && git push origin v0.1.0`.
 
 Note: on private repositories macOS minutes are billed at a higher rate than Linux.

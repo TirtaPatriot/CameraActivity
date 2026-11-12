@@ -1,8 +1,12 @@
 name: CI
 
+# server  : every push to main, pull requests, tags, manual runs
+# android : manual runs (Actions → CI → Run workflow) and tag pushes only
+# ios     : manual runs and tag pushes only
 on:
   push:
     branches: [main]
+    tags: ["*"]
   pull_request:
   workflow_dispatch:
 
@@ -14,8 +18,33 @@ permissions:
   contents: read
 
 jobs:
-  android-and-server:
-    name: Android app + server
+  server:
+    name: Server
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - uses: gradle/actions/setup-gradle@v4
+
+      - name: Build server fat JAR
+        run: ./gradlew :server:buildFatJar --stacktrace
+
+      - name: Upload server JAR
+        uses: actions/upload-artifact@v4
+        with:
+          name: activity-camera-server-jar
+          path: server/build/libs/activity-camera-server.jar
+          retention-days: 14
+
+  android:
+    name: Android APK
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     runs-on: ubuntu-latest
     timeout-minutes: 40
     steps:
@@ -28,8 +57,8 @@ jobs:
 
       - uses: gradle/actions/setup-gradle@v4
 
-      - name: Build Android debug APK and server fat JAR
-        run: ./gradlew :androidApp:assembleDebug :server:buildFatJar --stacktrace
+      - name: Build Android debug APK
+        run: ./gradlew :androidApp:assembleDebug --stacktrace
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
@@ -38,15 +67,9 @@ jobs:
           path: androidApp/build/outputs/apk/debug/*.apk
           retention-days: 14
 
-      - name: Upload server JAR
-        uses: actions/upload-artifact@v4
-        with:
-          name: activity-camera-server-jar
-          path: server/build/libs/activity-camera-server.jar
-          retention-days: 14
-
   ios:
     name: iOS (simulator build, unsigned)
+    if: github.event_name == 'workflow_dispatch' || startsWith(github.ref, 'refs/tags/')
     runs-on: macos-15
     timeout-minutes: 60
     steps:
