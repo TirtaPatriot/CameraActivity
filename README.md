@@ -24,7 +24,7 @@ database objects and API messages are in English.
 
 1. The officer takes a photo/video → the file is saved in the app folder (`.../ActivityCamera/`) and recorded in `index.json` as **PENDING**.
 2. In **Gallery**, the **Sync** button uploads captures one by one (multipart: `metadata` then `file`, streamed from disk).
-3. The server stores the file at `STORAGE_ROOT/photo|video/yyyy/MM/dd/<clientId>.<ext>` and inserts a row into `dbo.activity_capture`.
+3. The server stores the file at `STORAGE_ROOT/photo|video/yyyy/MM/dd/<clientId>.<ext>` and inserts a row into `cactivity.capture`.
 4. `clientId` (UUID from the device) is unique → re-uploads never create duplicates.
 
 ## Requirements

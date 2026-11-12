@@ -15,7 +15,7 @@ import java.time.OffsetDateTime
 import java.time.ZoneId
 import java.time.ZoneOffset
 
-/** Capture metadata in SQL Server (table dbo.activity_capture, see server/sql/001_init.sql). */
+/** Capture metadata in SQL Server (table cactivity.capture, see server/sql/001_init.sql). */
 class CaptureDb(config: ServerConfig) : AutoCloseable {
     private val dataSource = HikariDataSource(
         HikariConfig().apply {
@@ -35,7 +35,7 @@ class CaptureDb(config: ServerConfig) : AutoCloseable {
     }
 
     fun findByClientId(clientId: String): UploadResponse? = dataSource.connection.use { connection ->
-        connection.prepareStatement("SELECT id, storage_path FROM dbo.activity_capture WHERE client_id = ?").use { statement ->
+        connection.prepareStatement("SELECT id, storage_path FROM cactivity.capture WHERE client_id = ?").use { statement ->
             statement.setString(1, clientId)
             statement.executeQuery().use { rs ->
                 if (rs.next()) UploadResponse(rs.getLong(1), clientId, rs.getString(2), duplicate = true) else null
@@ -46,7 +46,7 @@ class CaptureDb(config: ServerConfig) : AutoCloseable {
     fun insert(metadata: CaptureMetadata, storagePath: String, fileSize: Long, originalName: String?): Long =
         dataSource.connection.use { connection ->
             val sql = """
-                INSERT INTO dbo.activity_capture
+                INSERT INTO cactivity.capture
                   (client_id, media_type, taken_at, timezone, latitude, longitude, accuracy_m, altitude_m,
                    note, user_code, device_model, platform, storage_path, file_size, original_name)
                 OUTPUT INSERTED.id
@@ -96,7 +96,7 @@ class CaptureDb(config: ServerConfig) : AutoCloseable {
             val sql = buildString {
                 append("SELECT TOP (").append(limit.coerceIn(1, 1000)).append(") ")
                 append("id, client_id, media_type, taken_at, latitude, longitude, accuracy_m, note, user_code, ")
-                append("storage_path, file_size, uploaded_at FROM dbo.activity_capture")
+                append("storage_path, file_size, uploaded_at FROM cactivity.capture")
                 if (conditions.isNotEmpty()) append(" WHERE ").append(conditions.joinToString(" AND "))
                 append(" ORDER BY taken_at DESC")
             }
@@ -109,7 +109,7 @@ class CaptureDb(config: ServerConfig) : AutoCloseable {
         }
 
     fun storagePathOf(id: Long): String? = dataSource.connection.use { connection ->
-        connection.prepareStatement("SELECT storage_path FROM dbo.activity_capture WHERE id = ?").use { statement ->
+        connection.prepareStatement("SELECT storage_path FROM cactivity.capture WHERE id = ?").use { statement ->
             statement.setLong(1, id)
             statement.executeQuery().use { rs -> if (rs.next()) rs.getString(1) else null }
         }
