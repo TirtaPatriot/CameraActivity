@@ -22,6 +22,7 @@ import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
@@ -85,6 +86,21 @@ fun ReviewScreen(settings: AppSettings, clientId: String, onBack: () -> Unit, on
         if (before != note.trim()) AppGraph.requestSync()
     }
     val isVideo = record.meta.mediaType == MediaType.VIDEO
+    // "Confirm after capture": leaving the screen any way other than Retake keeps the capture.
+    var discarded by remember(clientId) { mutableStateOf(false) }
+    DisposableEffect(clientId) {
+        onDispose {
+            if (!discarded) {
+                AppGraph.appScope.launch {
+                    val current = AppGraph.repository.find(clientId)
+                    if (current != null && !current.confirmed) {
+                        AppGraph.repository.confirm(clientId)
+                        AppGraph.requestSync()
+                    }
+                }
+            }
+        }
+    }
     val bitmap by rememberThumbnail(AppGraph.repository.filePath(record), isVideo, 2048)
 
     Column(Modifier.fillMaxSize().background(Color(0xFF0E1116))) {
@@ -154,8 +170,14 @@ fun ReviewScreen(settings: AppSettings, clientId: String, onBack: () -> Unit, on
                 Text(strings.share, fontSize = 16.sp, fontWeight = FontWeight.SemiBold)
             }
             Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
-                TextButton(onClick = onRetake) { Text(strings.retake) }
-                TextButton(onClick = onBack) { Text(strings.keepOnly) }
+                TextButton(onClick = {
+                    if (!record.confirmed) {
+                        discarded = true
+                        AppGraph.appScope.launch { AppGraph.repository.discardUnconfirmed(clientId) }
+                    }
+                    onRetake()
+                }) { Text(if (record.confirmed) strings.retake else strings.retakeDiscard) }
+                TextButton(onClick = onBack) { Text(if (record.confirmed) strings.keepOnly else strings.keep, fontWeight = FontWeight.SemiBold) }
             }
         }
     }

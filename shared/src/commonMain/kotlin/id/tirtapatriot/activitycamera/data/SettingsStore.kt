@@ -36,6 +36,8 @@ data class AppSettings(
     val customTasks: List<String> = emptyList(),
     /** One of [customTasks] picked instead of a server task. */
     val selectedCustomTask: String? = null,
+    /** After the shutter, show the capture first; it is only kept and uploaded once confirmed. */
+    val confirmAfterCapture: Boolean = false,
     /** Watermark as arranged by the officer. */
     val watermark: WatermarkPrefs = WatermarkPrefs(),
 ) {

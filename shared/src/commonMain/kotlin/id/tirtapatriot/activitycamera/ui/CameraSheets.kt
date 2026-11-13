@@ -28,6 +28,7 @@ import androidx.compose.foundation.rememberScrollState
 import androidx.compose.foundation.shape.CircleShape
 import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.foundation.verticalScroll
+import androidx.compose.material3.Checkbox
 import androidx.compose.material3.Icon
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
@@ -160,7 +161,13 @@ fun TaskSheet(
 
 /** Note for the next captures: printed on the photo and stored with the capture. */
 @Composable
-fun NoteSheet(note: String, onChange: (String) -> Unit, onClose: () -> Unit) {
+fun NoteSheet(
+    note: String,
+    clearAfterCapture: Boolean,
+    onClearAfterCaptureChange: (Boolean) -> Unit,
+    onChange: (String) -> Unit,
+    onClose: () -> Unit,
+) {
     val strings = LocalStrings.current
     var text by remember { mutableStateOf(note) }
     FloatingSheet(title = strings.noteTitle, subtitle = strings.noteSheetHint, onClose = onClose) {
@@ -175,6 +182,13 @@ fun NoteSheet(note: String, onChange: (String) -> Unit, onClose: () -> Unit) {
             maxLines = 4,
             modifier = Modifier.fillMaxWidth(),
         )
+        Row(
+            Modifier.fillMaxWidth().clickable { onClearAfterCaptureChange(!clearAfterCapture) }.padding(vertical = 4.dp),
+            verticalAlignment = Alignment.CenterVertically,
+        ) {
+            Checkbox(checked = clearAfterCapture, onCheckedChange = onClearAfterCaptureChange)
+            Text(strings.clearNoteAfterCapture, fontSize = 14.sp, color = Palette.Text)
+        }
         Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
             TextButton(onClick = {
                 text = ""

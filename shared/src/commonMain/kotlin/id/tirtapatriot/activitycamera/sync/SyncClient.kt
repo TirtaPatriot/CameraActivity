@@ -59,7 +59,7 @@ class SyncClient(
             var uploaded = 0
             var failed = 0
             // SYNCING left over from a killed process is retried too.
-            val queue = repository.items.value.filter { it.status != SyncStatus.SYNCED }
+            val queue = repository.items.value.filter { it.status != SyncStatus.SYNCED && it.confirmed }
             for (record in queue.reversed()) { // oldest first
                 val id = record.clientId
                 repository.update(id) { it.copy(status = SyncStatus.SYNCING, lastError = null) }

@@ -34,8 +34,10 @@ data class WatermarkPrefs(
     val showTask: Boolean = true,
     val showOfficer: Boolean = true,
     val showNote: Boolean = true,
-    /** Activity note, stays until the officer changes it. */
+    /** Activity note, stays until the officer changes it (or until the next capture, see below). */
     val note: String = "",
+    /** Clear [note] once a photo/video has been taken with it. */
+    val clearNoteAfterCapture: Boolean = false,
     /** Free extra line, e.g. a work order number. */
     val extraText: String = "",
     /** Position inside the free space of the frame: 0 = left/top, 1 = right/bottom. */

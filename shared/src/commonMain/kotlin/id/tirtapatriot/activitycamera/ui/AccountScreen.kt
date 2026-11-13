@@ -25,6 +25,7 @@ import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
+import androidx.compose.material3.Switch
 import androidx.compose.material3.Text
 import androidx.compose.material3.TextButton
 import androidx.compose.runtime.Composable
@@ -136,6 +137,27 @@ fun AccountScreen(
                         Spacer(Modifier.size(8.dp))
                         Text(strings.connectToServer)
                     }
+                }
+            }
+
+            // Camera
+            Card {
+                SectionTitle(AppIcons.Images, strings.cameraSection)
+                Row(
+                    Modifier.fillMaxWidth().clickable {
+                        AppGraph.settingsStore.update { it.copy(confirmAfterCapture = !it.confirmAfterCapture) }
+                    },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(strings.confirmAfterCapture, fontSize = 15.sp, color = Palette.Text)
+                        Text(strings.confirmAfterCaptureHint, fontSize = 13.sp, color = Palette.TextMuted)
+                    }
+                    Spacer(Modifier.size(8.dp))
+                    Switch(
+                        checked = settings.confirmAfterCapture,
+                        onCheckedChange = { on -> AppGraph.settingsStore.update { it.copy(confirmAfterCapture = on) } },
+                    )
                 }
             }
 

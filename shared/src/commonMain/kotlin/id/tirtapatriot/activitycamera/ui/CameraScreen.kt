@@ -73,7 +73,9 @@ import id.tirtapatriot.activitycamera.model.CaptureMetadata
 import id.tirtapatriot.activitycamera.model.MediaType
 import id.tirtapatriot.activitycamera.platform.PlatformInfo
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlin.math.roundToLong
@@ -212,12 +214,29 @@ fun CameraScreen(
         AppGraph.appScope.launch {
             val saved = raw.saveWithWatermark(repository.filePath(record), spec, geo)
             if (saved) {
-                repository.add(record)
-                justCaptured = record.clientId
-                AppGraph.requestSync()
+                keepCapture(record)
             } else {
                 toast = strings.photoFailed
             }
+        }
+    }
+
+    /** Stores a finished capture: straight away, or held for review when "confirm after capture" is on. */
+    suspend fun keepCapture(record: CaptureRecord) {
+        if (settings.confirmAfterCapture) {
+            repository.add(record.copy(confirmed = false))
+            withContext(Dispatchers.Main) { onOpenReview(record.clientId) }
+        } else {
+            repository.add(record)
+            justCaptured = record.clientId
+            AppGraph.requestSync()
+        }
+    }
+
+    /** "Clear note after capture": the note was used by this capture; empty it for the next one. */
+    fun noteUsed() {
+        if (settings.watermark.clearNoteAfterCapture && settings.watermark.note.isNotBlank()) {
+            store.update { it.copy(watermark = it.watermark.copy(note = "")) }
         }
     }
 
@@ -243,6 +262,7 @@ fun CameraScreen(
                         shutterFlash.animateTo(0f, tween(220))
                     }
                     savePhoto(raw, buildRecord(MediaType.PHOTO, takenAt, geo), geo, takenAt)
+                    noteUsed()
                 }
 
                 MediaType.VIDEO -> {
@@ -263,9 +283,8 @@ fun CameraScreen(
                         }
                         pendingVideo = null
                         if (saved) {
-                            repository.add(active)
-                            justCaptured = active.clientId
-                            AppGraph.requestSync()
+                            keepCapture(active)
+                            noteUsed()
                         } else {
                             toast = strings.videoFailed
                         }
@@ -377,7 +396,8 @@ fun CameraScreen(
             GlassIconButton(AppIcons.Grid, strings.grid, active = showGrid, onClick = { showGrid = !showGrid })
             GlassIconButton(
                 AppIcons.Timer, strings.timer,
-                badge = timerSeconds.takeIf { it > 0 }?.let { "$it" },
+                label = timerSeconds.takeIf { it > 0 }?.let { "${it}s" },
+                active = timerSeconds > 0,
                 enabled = !isRecording,
                 onClick = { timerSeconds = TimerOptions[(TimerOptions.indexOf(timerSeconds) + 1) % TimerOptions.size] },
             )
@@ -548,6 +568,8 @@ fun CameraScreen(
         ) {
             NoteSheet(
                 note = settings.watermark.note,
+                clearAfterCapture = settings.watermark.clearNoteAfterCapture,
+                onClearAfterCaptureChange = { on -> store.update { it.copy(watermark = it.watermark.copy(clearNoteAfterCapture = on)) } },
                 onChange = { text -> store.update { it.copy(watermark = it.watermark.copy(note = text)) } },
                 onClose = { sheet = CameraSheet.NONE },
             )
@@ -561,7 +583,8 @@ fun GlassIconButton(
     contentDescription: String,
     size: Int = 40,
     active: Boolean = false,
-    badge: String? = null,
+    /** Short text shown instead of the icon (e.g. "3s"). */
+    label: String? = null,
     enabled: Boolean = true,
     onClick: () -> Unit,
 ) {
@@ -573,16 +596,11 @@ fun GlassIconButton(
             .graphicsLayer { alpha = if (enabled) 1f else 0.45f },
         contentAlignment = Alignment.Center,
     ) {
-        Icon(icon, contentDescription, tint = if (active) Color(0xFFFFD54F) else Color.White, modifier = Modifier.size((size * 0.48f).dp))
-        badge?.let {
-            Text(
-                it,
-                color = Color.Black,
-                fontSize = 9.sp,
-                fontWeight = FontWeight.Bold,
-                modifier = Modifier.align(Alignment.BottomEnd).offset(x = 2.dp, y = 2.dp)
-                    .background(Color(0xFFFFD54F), CircleShape).padding(horizontal = 4.dp),
-            )
+        val tint = if (active) Color(0xFFFFD54F) else Color.White
+        if (label != null) {
+            Text(label, color = tint, fontSize = (size * 0.32f).sp, fontWeight = FontWeight.Bold, maxLines = 1)
+        } else {
+            Icon(icon, contentDescription, tint = tint, modifier = Modifier.size((size * 0.48f).dp))
         }
     }
 }

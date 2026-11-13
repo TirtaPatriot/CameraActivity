@@ -92,6 +92,12 @@ interface Strings {
     val clearNote: String
     val done: String
     val noteForCapture: String
+    val clearNoteAfterCapture: String
+    val cameraSection: String
+    val confirmAfterCapture: String
+    val confirmAfterCaptureHint: String
+    val keep: String
+    val retakeDiscard: String
     val connectToServer: String
 
     // Watermark sheet & stamp
@@ -223,6 +229,12 @@ object IndonesianStrings : Strings {
     override val clearNote = "Hapus catatan"
     override val done = "Selesai"
     override val noteForCapture = "Catatan untuk foto ini"
+    override val clearNoteAfterCapture = "Hapus catatan setelah foto diambil"
+    override val cameraSection = "Kamera"
+    override val confirmAfterCapture = "Konfirmasi setelah memotret"
+    override val confirmAfterCaptureHint = "Tinjau dulu setiap foto; baru disimpan dan dikirim setelah Anda pilih Simpan."
+    override val keep = "Simpan"
+    override val retakeDiscard = "Ulangi (buang)"
     override val connectToServer = "Hubungkan ke server"
 
     override val watermarkHint = "Geser watermark di layar untuk memindahkannya"
@@ -359,6 +371,12 @@ object EnglishStrings : Strings {
     override val clearNote = "Clear note"
     override val done = "Done"
     override val noteForCapture = "Note for this photo"
+    override val clearNoteAfterCapture = "Clear the note after taking a photo"
+    override val cameraSection = "Camera"
+    override val confirmAfterCapture = "Confirm after taking a photo"
+    override val confirmAfterCaptureHint = "Review each photo first; it is kept and uploaded only after you tap Keep."
+    override val keep = "Keep"
+    override val retakeDiscard = "Retake (discard)"
     override val connectToServer = "Connect to server"
 
     override val watermarkHint = "Drag the watermark on screen to move it"

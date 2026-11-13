@@ -30,6 +30,8 @@ data class CaptureRecord(
     val sharedReported: Boolean = false,
     /** The note changed after upload and the server doesn't have it yet. */
     val noteDirty: Boolean = false,
+    /** False while waiting for the officer to keep or retake it ("confirm after capture"); not uploaded yet. */
+    val confirmed: Boolean = true,
 ) {
     val clientId: String get() = meta.clientId
 }
@@ -50,7 +52,8 @@ class CaptureRepository(private val baseDir: String = mediaDirectory()) {
 
     init {
         LocalFiles.ensureDir(baseDir)
-        _items.value = load()
+        // A capture left unconfirmed (app closed during review) is kept rather than lost.
+        _items.value = load().map { if (it.confirmed) it else it.copy(confirmed = true) }
     }
 
     fun filePath(fileName: String): String = "$baseDir/$fileName"
@@ -68,6 +71,15 @@ class CaptureRepository(private val baseDir: String = mediaDirectory()) {
 
     suspend fun update(clientId: String, change: (CaptureRecord) -> CaptureRecord) = mutate { list ->
         list.map { if (it.clientId == clientId) change(it) else it }
+    }
+
+    suspend fun confirm(clientId: String) = update(clientId) { it.copy(confirmed = true) }
+
+    /** Removes a capture that was never confirmed (retake), including its file. */
+    suspend fun discardUnconfirmed(clientId: String) = mutate { list ->
+        val record = list.firstOrNull { it.clientId == clientId && !it.confirmed } ?: return@mutate list
+        LocalFiles.delete(filePath(record))
+        list - record
     }
 
     /** Changes the note of one capture (sync sends it to the server when already uploaded). */
