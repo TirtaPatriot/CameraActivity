@@ -58,6 +58,7 @@ interface Strings {
     val modePhoto: String
     val modeVideo: String
     val account: String
+    val settings: String
     val flash: String
     val grid: String
     val timer: String
@@ -189,6 +190,7 @@ object IndonesianStrings : Strings {
     override val modePhoto = "Foto"
     override val modeVideo = "Video"
     override val account = "Akun"
+    override val settings = "Pengaturan"
     override val flash = "Lampu kilat"
     override val grid = "Garis bantu"
     override val timer = "Pewaktu"
@@ -324,6 +326,7 @@ object EnglishStrings : Strings {
     override val modePhoto = "Photo"
     override val modeVideo = "Video"
     override val account = "Account"
+    override val settings = "Settings"
     override val flash = "Flash"
     override val grid = "Grid"
     override val timer = "Timer"

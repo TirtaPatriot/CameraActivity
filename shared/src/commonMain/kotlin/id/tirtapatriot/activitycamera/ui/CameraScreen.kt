@@ -343,7 +343,7 @@ fun CameraScreen(
             horizontalArrangement = Arrangement.spacedBy(8.dp),
         ) {
             Box {
-                GlassIconButton(AppIcons.User, strings.account, onClick = onOpenAccount, enabled = !isRecording)
+                GlassIconButton(AppIcons.Settings, strings.settings, onClick = onOpenAccount, enabled = !isRecording)
                 if (settings.isConnected && !settings.isSignedIn) {
                     Box(Modifier.align(Alignment.TopEnd).size(10.dp).background(Color(0xFFFFB300), CircleShape).border(1.5.dp, Color.Black, CircleShape))
                 }

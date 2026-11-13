@@ -61,7 +61,7 @@ fun AccountScreen(
     Column(Modifier.fillMaxSize().background(Palette.Background)) {
         Row(Modifier.fillMaxWidth().statusBarsPadding().padding(horizontal = 6.dp, vertical = 4.dp), verticalAlignment = Alignment.CenterVertically) {
             IconButton(onClick = onBack) { Icon(AppIcons.Back, strings.back, tint = Palette.Text) }
-            Text(strings.account, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Palette.Text)
+            Text(strings.settings, fontSize = 20.sp, fontWeight = FontWeight.Bold, color = Palette.Text)
         }
         Column(
             Modifier.verticalScroll(rememberScrollState()).navigationBarsPadding().padding(horizontal = 16.dp, vertical = 8.dp),
