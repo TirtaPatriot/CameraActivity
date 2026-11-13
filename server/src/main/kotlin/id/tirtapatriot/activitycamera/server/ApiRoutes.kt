@@ -6,6 +6,7 @@ import id.tirtapatriot.activitycamera.model.CaptureMetadata
 import id.tirtapatriot.activitycamera.model.ErrorResponse
 import id.tirtapatriot.activitycamera.model.LoginRequest
 import id.tirtapatriot.activitycamera.model.LoginResponse
+import id.tirtapatriot.activitycamera.model.NoteReport
 import id.tirtapatriot.activitycamera.model.ShareReport
 import id.tirtapatriot.activitycamera.model.UploadResponse
 import id.tirtapatriot.activitycamera.model.UserRole
@@ -31,6 +32,7 @@ import java.time.Instant
 import java.time.LocalDate
 
 private const val DEFAULT_LIST_LIMIT = 100
+private const val MAX_NOTE_LENGTH = 500
 
 private val json = Json { ignoreUnknownKeys = true }
 private val clientIdPattern = Regex("[A-Za-z0-9-]{8,64}")
@@ -204,6 +206,18 @@ fun Route.apiRoutes(deps: ServerDeps) {
             val found = blocking {
                 deps.captures.markShared(clientId, Instant.ofEpochMilli(report.sharedAtEpochMs), deps.config.timeZone)
             }
+            call.respond(if (found) HttpStatusCode.NoContent else HttpStatusCode.NotFound)
+        }
+
+        // The officer changed the note of an already uploaded capture.
+        post("{clientId}/note") {
+            uploaderOrNull(deps) ?: return@post
+            val clientId = call.parameters["clientId"].orEmpty()
+            if (!clientIdPattern.matches(clientId)) {
+                return@post call.respond(HttpStatusCode.BadRequest, ErrorResponse("Invalid clientId"))
+            }
+            val note = call.receive<NoteReport>().note?.trim()?.take(MAX_NOTE_LENGTH)?.ifEmpty { null }
+            val found = blocking { deps.captures.updateNote(clientId, note) }
             call.respond(if (found) HttpStatusCode.NoContent else HttpStatusCode.NotFound)
         }
 

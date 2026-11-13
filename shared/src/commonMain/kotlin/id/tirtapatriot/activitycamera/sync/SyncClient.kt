@@ -8,6 +8,7 @@ import id.tirtapatriot.activitycamera.data.SyncStatus
 import id.tirtapatriot.activitycamera.media.mimeType
 import id.tirtapatriot.activitycamera.model.ApiContract
 import id.tirtapatriot.activitycamera.model.CaptureMetadata
+import id.tirtapatriot.activitycamera.model.NoteReport
 import id.tirtapatriot.activitycamera.model.ShareReport
 import id.tirtapatriot.activitycamera.model.UploadResponse
 import io.ktor.client.call.body
@@ -74,6 +75,8 @@ class SyncClient(
                             status = SyncStatus.SYNCED,
                             serverId = response.serverId,
                             sharedReported = it.sharedAtEpochMs != null && it.sharedAtEpochMs == metadata.sharedAtEpochMs,
+                            // edited while uploading: the server still has the old note
+                            noteDirty = it.meta.note != metadata.note,
                         )
                     }
                     uploaded++
@@ -91,6 +94,7 @@ class SyncClient(
                 }
             }
             failed += reportShares(settings.serverUrl, token)
+            failed += reportNotes(settings.serverUrl, token)
             return SyncResult(uploaded, failed)
         } finally {
             running.unlock()
@@ -115,6 +119,24 @@ class SyncClient(
                 response.status.isSuccess() || response.status == HttpStatusCode.NotFound
             }.getOrDefault(false)
             if (ok) repository.update(record.clientId) { it.copy(sharedReported = true) } else failed++
+        }
+        return failed
+    }
+
+    /** Notes edited after upload; returns how many reports failed. */
+    private suspend fun reportNotes(serverUrl: String, token: String?): Int {
+        var failed = 0
+        for (record in repository.items.value.filter { it.status == SyncStatus.SYNCED && it.noteDirty }) {
+            val sent = record.meta.note
+            val ok = runCatching {
+                val response = api.http.post(serverUrl + ApiContract.notePath(record.clientId)) {
+                    authorize(token)
+                    contentType(ContentType.Application.Json)
+                    setBody(NoteReport(sent))
+                }
+                response.status.isSuccess() || response.status == HttpStatusCode.NotFound
+            }.getOrDefault(false)
+            if (ok) repository.update(record.clientId) { it.copy(noteDirty = it.meta.note != sent) } else failed++
         }
         return failed
     }

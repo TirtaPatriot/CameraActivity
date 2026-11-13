@@ -117,6 +117,15 @@ class CaptureDb(private val dataSource: DataSource, private val reportZone: Zone
         }
     }
 
+    /** Replaces the note; true when the capture exists. */
+    fun updateNote(clientId: String, note: String?): Boolean = dataSource.connection.use { connection ->
+        connection.prepareStatement("UPDATE cactivity.capture SET note = ? WHERE client_id = ?").use { statement ->
+            statement.setNullableString(1, note)
+            statement.setString(2, clientId)
+            statement.executeUpdate() > 0
+        }
+    }
+
     fun storagePathOf(id: Long): String? = dataSource.connection.use { connection ->
         connection.prepareStatement("SELECT storage_path FROM cactivity.capture WHERE id = ?").use { statement ->
             statement.setLong(1, id)

@@ -28,6 +28,8 @@ data class CaptureRecord(
     val sharedAtEpochMs: Long? = null,
     /** The server already knows about [sharedAtEpochMs]. */
     val sharedReported: Boolean = false,
+    /** The note changed after upload and the server doesn't have it yet. */
+    val noteDirty: Boolean = false,
 ) {
     val clientId: String get() = meta.clientId
 }
@@ -66,6 +68,12 @@ class CaptureRepository(private val baseDir: String = mediaDirectory()) {
 
     suspend fun update(clientId: String, change: (CaptureRecord) -> CaptureRecord) = mutate { list ->
         list.map { if (it.clientId == clientId) change(it) else it }
+    }
+
+    /** Changes the note of one capture (sync sends it to the server when already uploaded). */
+    suspend fun updateNote(clientId: String, note: String?) = update(clientId) {
+        val cleaned = note?.trim()?.ifEmpty { null }
+        if (it.meta.note == cleaned) it else it.copy(meta = it.meta.copy(note = cleaned), noteDirty = true)
     }
 
     /** Marks captures as shared now (only the first share counts). */

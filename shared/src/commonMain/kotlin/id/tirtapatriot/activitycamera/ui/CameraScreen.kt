@@ -78,9 +78,10 @@ import kotlinx.datetime.Clock
 import kotlinx.datetime.TimeZone
 import kotlin.math.roundToLong
 
-private enum class CameraSheet { NONE, TASKS, WATERMARK }
+private enum class CameraSheet { NONE, TASKS, WATERMARK, NOTE }
 
 private val TimerOptions = listOf(0, 3, 10)
+private const val MAX_CUSTOM_TASKS = 20
 
 /** The first screen: full camera with floating glass controls. Works without a server or an account. */
 @Composable
@@ -103,6 +104,7 @@ fun CameraScreen(
     val branding = settings.config.branding
     val tasks = settings.config.tasks
     val task = settings.selectedTask
+    val taskName = settings.pickedTaskName
     val accent = brandColor(branding.primaryColor)
     val allowedModes = buildList {
         if (policy.allowVideo) add(MediaType.VIDEO)
@@ -162,7 +164,7 @@ fun CameraScreen(
         timeZone = timeZone,
         fix = geo,
         organization = branding.organizationName.takeIf { settings.isConnected },
-        taskName = task?.name,
+        taskName = taskName,
         officer = settings.officerLabel,
         accentArgb = accent.toArgb().toLong() and 0xFFFFFFFFL,
         strings = strings,
@@ -182,7 +184,7 @@ fun CameraScreen(
             isMockLocation = geo?.isMock == true,
             note = settings.watermark.note.trim().ifEmpty { null },
             taskId = task?.id,
-            taskName = task?.name,
+            taskName = taskName,
             userCode = settings.user?.userCode,
             deviceId = settings.deviceId,
             deviceModel = PlatformInfo.deviceModel,
@@ -196,7 +198,7 @@ fun CameraScreen(
 
     /** Why a new capture may not start yet, per the server's rules; null when allowed. */
     fun blockReason(): String? = when {
-        policy.requireTask && task == null && tasks.isNotEmpty() -> {
+        policy.requireTask && taskName == null -> {
             sheet = CameraSheet.TASKS
             strings.taskRequired
         }
@@ -363,9 +365,13 @@ fun CameraScreen(
             }
             Spacer(Modifier.weight(1f))
             GlassIconButton(
-                if (flash == FlashMode.OFF) AppIcons.FlashOff else AppIcons.Flash,
+                when (flash) {
+                    FlashMode.OFF -> AppIcons.FlashOff
+                    FlashMode.ON -> AppIcons.Flash
+                    FlashMode.AUTO -> AppIcons.FlashAuto
+                },
                 strings.flash,
-                badge = if (flash == FlashMode.AUTO) "A" else null,
+                active = flash == FlashMode.ON,
                 onClick = { flash = FlashMode.entries[(flash.ordinal + 1) % FlashMode.entries.size] },
             )
             GlassIconButton(AppIcons.Grid, strings.grid, active = showGrid, onClick = { showGrid = !showGrid })
@@ -403,9 +409,9 @@ fun CameraScreen(
             ) {
                 Box(Modifier.weight(1f)) {
                     TaskPill(
-                        taskName = task?.name,
-                        icon = task?.let { AppIcons.task(it.icon) } ?: AppIcons.Task,
-                        hint = if (policy.requireTask) strings.pickTaskRequired else strings.pickTaskOptional,
+                        taskName = taskName,
+                        icon = task?.let { AppIcons.task(it.icon) } ?: if (taskName != null) AppIcons.Other else AppIcons.Task,
+                        hint = if (policy.requireTask) strings.pickTaskRequired else strings.pickTask,
                         enabled = !isRecording,
                         onClick = { sheet = CameraSheet.TASKS },
                     )
@@ -414,6 +420,12 @@ fun CameraScreen(
                     zoom = ratio
                     controller?.setZoom(ratio)
                 }
+                GlassIconButton(
+                    AppIcons.Note, strings.noteButton,
+                    active = settings.watermark.note.isNotBlank(),
+                    enabled = !isRecording,
+                    onClick = { sheet = CameraSheet.NOTE },
+                )
                 if (mode == MediaType.PHOTO) {
                     GlassIconButton(AppIcons.Stamp, strings.watermark, enabled = !isRecording, onClick = { sheet = CameraSheet.WATERMARK })
                 }
@@ -446,7 +458,7 @@ fun CameraScreen(
                         visible = justCaptured != null && !isRecording,
                         enter = fadeIn() + scaleIn(initialScale = 0.8f),
                         exit = fadeOut() + scaleOut(targetScale = 0.8f),
-                        modifier = Modifier.offset(x = 64.dp),
+                        modifier = Modifier.offset(y = (-62).dp),
                     ) {
                         Row(
                             Modifier
@@ -488,8 +500,27 @@ fun CameraScreen(
             TaskSheet(
                 settings = settings,
                 onPick = { picked ->
-                    store.update { it.copy(selectedTaskId = picked?.id) }
+                    store.update { it.copy(selectedTaskId = picked?.id, selectedCustomTask = null) }
                     sheet = CameraSheet.NONE
+                },
+                onPickCustom = { name ->
+                    store.update { it.copy(selectedTaskId = null, selectedCustomTask = name) }
+                    sheet = CameraSheet.NONE
+                },
+                onAddCustom = { name ->
+                    store.update {
+                        val list = (it.customTasks.filterNot { t -> t.equals(name, ignoreCase = true) } + name).takeLast(MAX_CUSTOM_TASKS)
+                        it.copy(customTasks = list, selectedTaskId = null, selectedCustomTask = name)
+                    }
+                    sheet = CameraSheet.NONE
+                },
+                onRemoveCustom = { name ->
+                    store.update {
+                        it.copy(
+                            customTasks = it.customTasks - name,
+                            selectedCustomTask = it.selectedCustomTask.takeIf { selected -> selected != name },
+                        )
+                    }
                 },
                 onOpenAccount = {
                     sheet = CameraSheet.NONE
@@ -507,6 +538,17 @@ fun CameraScreen(
                 prefs = settings.watermark,
                 previewSpec = { buildSpec(it, now, fix) },
                 onChange = { changed -> store.update { it.copy(watermark = changed) } },
+                onClose = { sheet = CameraSheet.NONE },
+            )
+        }
+        AnimatedVisibility(
+            visible = sheet == CameraSheet.NOTE,
+            enter = sheetEnter(), exit = sheetExit(),
+            modifier = Modifier.align(Alignment.BottomCenter),
+        ) {
+            NoteSheet(
+                note = settings.watermark.note,
+                onChange = { text -> store.update { it.copy(watermark = it.watermark.copy(note = text)) } },
                 onClose = { sheet = CameraSheet.NONE },
             )
         }

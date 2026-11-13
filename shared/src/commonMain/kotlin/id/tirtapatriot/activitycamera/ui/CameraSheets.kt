@@ -93,36 +93,109 @@ private fun FloatingSheet(title: String, subtitle: String?, onClose: () -> Unit,
 }
 
 @Composable
-fun TaskSheet(settings: AppSettings, onPick: (TaskType?) -> Unit, onOpenAccount: () -> Unit, onClose: () -> Unit) {
+fun TaskSheet(
+    settings: AppSettings,
+    onPick: (TaskType?) -> Unit,
+    onPickCustom: (String) -> Unit,
+    onAddCustom: (String) -> Unit,
+    onRemoveCustom: (String) -> Unit,
+    onOpenAccount: () -> Unit,
+    onClose: () -> Unit,
+) {
     val strings = LocalStrings.current
     val policy = settings.config.capture
     val tasks = settings.config.tasks
+    val picked = settings.pickedTaskName
+    var newTask by remember { mutableStateOf("") }
     FloatingSheet(
         title = strings.tasksTitle,
         subtitle = if (policy.requireTask) strings.tasksRequiredHint else strings.tasksOptionalHint,
         onClose = onClose,
     ) {
-        if (tasks.isEmpty()) {
-            Text(
-                if (settings.isConnected) strings.tasksEmpty else strings.tasksNeedServer,
-                color = Palette.TextMuted, fontSize = 14.sp, modifier = Modifier.padding(vertical = 8.dp),
-            )
-            if (!settings.isConnected) {
-                TextButton(onClick = onOpenAccount) { Text(strings.connectToServer) }
-            }
-            return@FloatingSheet
-        }
+        // Tasks prepared by the admin
         tasks.forEach { task ->
             TaskRow(task.name, AppIcons.task(task.icon), selected = task.id == settings.selectedTaskId) { onPick(task) }
         }
+        // Tasks the officer added on this phone
+        settings.customTasks.forEach { name ->
+            TaskRow(
+                name, AppIcons.Other,
+                selected = settings.selectedTaskId == null && name == picked,
+                onRemove = { onRemoveCustom(name) },
+            ) { onPickCustom(name) }
+        }
+        Row(Modifier.fillMaxWidth().padding(vertical = 6.dp), verticalAlignment = Alignment.CenterVertically) {
+            OutlinedTextField(
+                value = newTask,
+                onValueChange = { newTask = it.take(MAX_TASK_NAME) },
+                placeholder = { Text(strings.ownTaskPlaceholder) },
+                label = { Text(strings.addOwnTask) },
+                singleLine = true,
+                modifier = Modifier.weight(1f),
+            )
+            Spacer(Modifier.size(8.dp))
+            val name = newTask.trim()
+            Box(
+                Modifier
+                    .size(48.dp)
+                    .clip(CircleShape)
+                    .background(if (name.isNotEmpty()) MaterialTheme.colorScheme.primary else Palette.SurfaceMuted)
+                    .clickable(enabled = name.isNotEmpty()) {
+                        onAddCustom(name)
+                        newTask = ""
+                    },
+                contentAlignment = Alignment.Center,
+            ) {
+                Icon(AppIcons.Plus, strings.add, tint = if (name.isNotEmpty()) MaterialTheme.colorScheme.onPrimary else Palette.TextMuted, modifier = Modifier.size(22.dp))
+            }
+        }
         if (!policy.requireTask) {
-            TaskRow(strings.noTask, AppIcons.Close, selected = settings.selectedTaskId == null, muted = true) { onPick(null) }
+            TaskRow(strings.noTask, AppIcons.Close, selected = picked == null, muted = true) { onPick(null) }
+        }
+        if (tasks.isEmpty() && !settings.isConnected) {
+            TextButton(onClick = onOpenAccount) { Text(strings.tasksNeedServer, fontSize = 13.sp) }
         }
     }
 }
 
+/** Note for the next captures: printed on the photo and stored with the capture. */
 @Composable
-private fun TaskRow(name: String, icon: androidx.compose.ui.graphics.vector.ImageVector, selected: Boolean, muted: Boolean = false, onClick: () -> Unit) {
+fun NoteSheet(note: String, onChange: (String) -> Unit, onClose: () -> Unit) {
+    val strings = LocalStrings.current
+    var text by remember { mutableStateOf(note) }
+    FloatingSheet(title = strings.noteTitle, subtitle = strings.noteSheetHint, onClose = onClose) {
+        OutlinedTextField(
+            value = text,
+            onValueChange = {
+                text = it.take(WatermarkPrefs.MAX_TEXT)
+                onChange(text)
+            },
+            placeholder = { Text(strings.notePlaceholder) },
+            minLines = 2,
+            maxLines = 4,
+            modifier = Modifier.fillMaxWidth(),
+        )
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.SpaceBetween) {
+            TextButton(onClick = {
+                text = ""
+                onChange("")
+            }, enabled = text.isNotEmpty()) { Text(strings.clearNote) }
+            TextButton(onClick = onClose) { Text(strings.done, fontWeight = FontWeight.SemiBold) }
+        }
+    }
+}
+
+private const val MAX_TASK_NAME = 60
+
+@Composable
+private fun TaskRow(
+    name: String,
+    icon: androidx.compose.ui.graphics.vector.ImageVector,
+    selected: Boolean,
+    muted: Boolean = false,
+    onRemove: (() -> Unit)? = null,
+    onClick: () -> Unit,
+) {
     val primary = MaterialTheme.colorScheme.primary
     Row(
         Modifier
@@ -140,6 +213,13 @@ private fun TaskRow(name: String, icon: androidx.compose.ui.graphics.vector.Imag
         Spacer(Modifier.size(14.dp))
         Text(name, modifier = Modifier.weight(1f), fontSize = 15.sp, fontWeight = FontWeight.Medium, color = if (muted) Palette.TextMuted else Palette.Text)
         if (selected) Icon(AppIcons.Check, null, tint = primary, modifier = Modifier.size(20.dp))
+        onRemove?.let { remove ->
+            Spacer(Modifier.size(4.dp))
+            Box(
+                Modifier.size(32.dp).clip(CircleShape).clickable(onClick = remove),
+                contentAlignment = Alignment.Center,
+            ) { Icon(AppIcons.Close, LocalStrings.current.remove, tint = Palette.TextMuted, modifier = Modifier.size(16.dp)) }
+        }
     }
 }
 
@@ -151,8 +231,7 @@ fun WatermarkSheet(
     onClose: () -> Unit,
 ) {
     val strings = LocalStrings.current
-    // Text fields edit locally and save as they change; toggles save immediately.
-    var note by remember { mutableStateOf(prefs.note) }
+    // The text field edits locally and saves as it changes; toggles save immediately.
     var extra by remember { mutableStateOf(prefs.extraText) }
     FloatingSheet(title = strings.watermark, subtitle = strings.watermarkHint, onClose = onClose) {
         Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
@@ -166,18 +245,6 @@ fun WatermarkSheet(
             }
         }
         Spacer(Modifier.size(14.dp))
-        OutlinedTextField(
-            value = note,
-            onValueChange = {
-                note = it.take(WatermarkPrefs.MAX_TEXT)
-                onChange(prefs.copy(note = note))
-            },
-            label = { Text(strings.noteLabel) },
-            placeholder = { Text(strings.notePlaceholder) },
-            singleLine = true,
-            modifier = Modifier.fillMaxWidth(),
-        )
-        Spacer(Modifier.size(8.dp))
         OutlinedTextField(
             value = extra,
             onValueChange = {

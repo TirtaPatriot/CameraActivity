@@ -48,6 +48,7 @@ import id.tirtapatriot.activitycamera.media.ShareText
 import id.tirtapatriot.activitycamera.media.mimeType
 import id.tirtapatriot.activitycamera.media.rememberThumbnail
 import id.tirtapatriot.activitycamera.model.MediaType
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 
 /** Shares captures through the system sheet and records the share (reported to the server by sync). */
@@ -73,7 +74,16 @@ fun ReviewScreen(settings: AppSettings, clientId: String, onBack: () -> Unit, on
         return
     }
     val organization = settings.config.branding.organizationName.takeIf { settings.isConnected }
+    var note by remember(clientId) { mutableStateOf(record.meta.note.orEmpty()) }
     var text by remember(clientId) { mutableStateOf(ShareText.forCapture(record, organization, settings.officerLabel, strings)) }
+    // Follow the note in the caption until the officer edits the caption by hand.
+    var captionEdited by remember(clientId) { mutableStateOf(false) }
+    LaunchedEffect(clientId, note) {
+        delay(500) // save after typing pauses
+        val before = AppGraph.repository.find(clientId)?.meta?.note.orEmpty()
+        AppGraph.repository.updateNote(clientId, note)
+        if (before != note.trim()) AppGraph.requestSync()
+    }
     val isVideo = record.meta.mediaType == MediaType.VIDEO
     val bitmap by rememberThumbnail(AppGraph.repository.filePath(record), isVideo, 2048)
 
@@ -110,8 +120,25 @@ fun ReviewScreen(settings: AppSettings, clientId: String, onBack: () -> Unit, on
         ) {
             SyncLine(record, settings, strings)
             OutlinedTextField(
+                value = note,
+                onValueChange = { value ->
+                    note = value.take(NOTE_MAX)
+                    if (!captionEdited) {
+                        val withNote = record.copy(meta = record.meta.copy(note = note.trim().ifEmpty { null }))
+                        text = ShareText.forCapture(withNote, organization, settings.officerLabel, strings)
+                    }
+                },
+                label = { Text(strings.noteForCapture) },
+                placeholder = { Text(strings.notePlaceholder) },
+                singleLine = true,
+                modifier = Modifier.fillMaxWidth(),
+            )
+            OutlinedTextField(
                 value = text,
-                onValueChange = { text = it },
+                onValueChange = {
+                    text = it
+                    captionEdited = true
+                },
                 label = { Text(strings.shareCaption) },
                 minLines = 3,
                 maxLines = 6,
@@ -143,6 +170,8 @@ private fun SyncLine(record: CaptureRecord, settings: AppSettings, strings: Stri
         Text(label, fontSize = 13.sp, color = color)
     }
 }
+
+private const val NOTE_MAX = 200
 
 /** Icon, label and color describing where a capture is: on the server, waiting, or phone only. */
 fun syncState(record: CaptureRecord, settings: AppSettings, strings: Strings): Triple<ImageVector, String, Color> = when {

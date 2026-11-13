@@ -73,6 +73,10 @@ data class CaptureSummary(
 @Serializable
 data class ShareReport(val sharedAtEpochMs: Long)
 
+/** Sent when the note of an already uploaded capture is changed on the phone. */
+@Serializable
+data class NoteReport(val note: String?)
+
 @Serializable
 data class ErrorResponse(val error: String)
 
@@ -101,4 +105,7 @@ object ApiContract {
 
     /** POST [ShareReport]: records that an uploaded capture was shared from the phone. */
     fun sharedPath(clientId: String) = "$CAPTURES/$clientId/shared"
+
+    /** POST [NoteReport]: replaces the note of an uploaded capture. */
+    fun notePath(clientId: String) = "$CAPTURES/$clientId/note"
 }

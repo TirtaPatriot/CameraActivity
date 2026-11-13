@@ -66,7 +66,7 @@ interface Strings {
     val share: String
     val gpsSearching: String
     val mockLocation: String
-    val pickTaskOptional: String
+    val pickTask: String
     val pickTaskRequired: String
     val taskRequired: String
     val photoFailed: String
@@ -81,6 +81,16 @@ interface Strings {
     val tasksEmpty: String
     val tasksNeedServer: String
     val noTask: String
+    val addOwnTask: String
+    val ownTaskPlaceholder: String
+    val add: String
+    val remove: String
+    val noteButton: String
+    val noteTitle: String
+    val noteSheetHint: String
+    val clearNote: String
+    val done: String
+    val noteForCapture: String
     val connectToServer: String
 
     // Watermark sheet & stamp
@@ -187,7 +197,7 @@ object IndonesianStrings : Strings {
     override val share = "Bagikan"
     override val gpsSearching = "Mencari GPS…"
     override val mockLocation = "Lokasi palsu"
-    override val pickTaskOptional = "Pilih tugas · opsional"
+    override val pickTask = "Pilih tugas"
     override val pickTaskRequired = "Pilih tugas dulu"
     override val taskRequired = "Instansi meminta tugas dipilih dulu"
     override val photoFailed = "Gagal mengambil foto"
@@ -196,11 +206,21 @@ object IndonesianStrings : Strings {
     override val locationRequired = "Tunggu lokasi GPS ditemukan"
 
     override val tasksTitle = "Tugas"
-    override val tasksOptionalHint = "Opsional — membuat laporan lebih rapi"
+    override val tasksOptionalHint = "Membuat laporan lebih rapi"
     override val tasksRequiredHint = "Wajib dipilih sesuai aturan instansi"
     override val tasksEmpty = "Admin belum menyiapkan daftar tugas."
     override val tasksNeedServer = "Daftar tugas disiapkan admin instansi. Hubungkan ke server untuk melihatnya."
     override val noTask = "Tanpa tugas"
+    override val addOwnTask = "Tambah tugas sendiri"
+    override val ownTaskPlaceholder = "mis. Cek tekanan air"
+    override val add = "Tambah"
+    override val remove = "Hapus"
+    override val noteButton = "Catatan"
+    override val noteTitle = "Catatan"
+    override val noteSheetHint = "Ikut tercetak di foto dan tercatat di laporan. Tetap dipakai untuk foto berikutnya sampai diubah."
+    override val clearNote = "Hapus catatan"
+    override val done = "Selesai"
+    override val noteForCapture = "Catatan untuk foto ini"
     override val connectToServer = "Hubungkan ke server"
 
     override val watermarkHint = "Geser watermark di layar untuk memindahkannya"
@@ -312,7 +332,7 @@ object EnglishStrings : Strings {
     override val share = "Share"
     override val gpsSearching = "Finding GPS…"
     override val mockLocation = "Mock location"
-    override val pickTaskOptional = "Pick a task · optional"
+    override val pickTask = "Pick a task"
     override val pickTaskRequired = "Pick a task first"
     override val taskRequired = "Your organization asks you to pick a task first"
     override val photoFailed = "Failed to take photo"
@@ -321,11 +341,21 @@ object EnglishStrings : Strings {
     override val locationRequired = "Wait for a GPS location"
 
     override val tasksTitle = "Task"
-    override val tasksOptionalHint = "Optional — makes reports tidier"
+    override val tasksOptionalHint = "Makes reports tidier"
     override val tasksRequiredHint = "Required by your organization"
     override val tasksEmpty = "The admin hasn't set up tasks yet."
     override val tasksNeedServer = "Tasks are prepared by your organization's admin. Connect to the server to see them."
     override val noTask = "No task"
+    override val addOwnTask = "Add your own task"
+    override val ownTaskPlaceholder = "e.g. Check water pressure"
+    override val add = "Add"
+    override val remove = "Remove"
+    override val noteButton = "Note"
+    override val noteTitle = "Note"
+    override val noteSheetHint = "Printed on the photo and recorded in the report. Kept for the next photos until you change it."
+    override val clearNote = "Clear note"
+    override val done = "Done"
+    override val noteForCapture = "Note for this photo"
     override val connectToServer = "Connect to server"
 
     override val watermarkHint = "Drag the watermark on screen to move it"

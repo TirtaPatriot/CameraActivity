@@ -30,8 +30,12 @@ data class AppSettings(
     val sessionExpired: Boolean = false,
     /** UI language picked on this phone; null = the server's default language. */
     val language: AppLanguage? = null,
-    /** Task picked in the camera (optional). */
+    /** Task from the server picked in the camera. */
     val selectedTaskId: Long? = null,
+    /** Tasks the officer typed in on this phone. */
+    val customTasks: List<String> = emptyList(),
+    /** One of [customTasks] picked instead of a server task. */
+    val selectedCustomTask: String? = null,
     /** Watermark as arranged by the officer. */
     val watermark: WatermarkPrefs = WatermarkPrefs(),
 ) {
@@ -42,6 +46,9 @@ data class AppSettings(
 
     /** The picked task, if the server still offers it. */
     val selectedTask: TaskType? get() = selectedTaskId?.let { id -> config.tasks.firstOrNull { it.id == id } }
+
+    /** Name of the picked task: a server task or one typed in by the officer. */
+    val pickedTaskName: String? get() = selectedTask?.name ?: selectedCustomTask?.takeIf { it in customTasks }
 
     /** Uploads are possible: connected, and signed in unless the server accepts anonymous phones. */
     val canUpload: Boolean

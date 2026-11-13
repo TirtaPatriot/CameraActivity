@@ -25,6 +25,7 @@ object AppIcons {
         }.build()
 
     val Flash by lazy { icon("flash", "M13 2 4 14h7l-1 8 9-12h-7l1-8z") }
+    val FlashAuto by lazy { icon("flash_auto", "M10.5 2 3.5 12.5h5.5l-1 8.5 6.5-10H9l1.5-9z", "M15.5 22l2.75-7.5L21 22", "M16.4 19.6h3.7") }
     val FlashOff by lazy { icon("flash_off", "M13 2 4 14h7l-1 8 9-12h-7l1-8z", "M3 3l18 18") }
     val Flip by lazy { icon("flip", "M3 12a9 9 0 0 1 15.5-6.2L21 8", "M21 3v5h-5", "M21 12a9 9 0 0 1-15.5 6.2L3 16", "M3 21v-5h5") }
     val Grid by lazy { icon("grid", "M4 4h16v16H4z", "M9.33 4v16", "M14.67 4v16", "M4 9.33h16", "M4 14.67h16") }
@@ -50,6 +51,8 @@ object AppIcons {
     val Qr by lazy { icon("qr", "M3 3h7v7H3z", "M14 3h7v7h-7z", "M3 14h7v7H3z", "M14 14h3v3h-3z", "M21 17v4h-4") }
     val Sync by lazy { icon("sync", "M21 12a9 9 0 1 1-3-6.7L21 8", "M21 3v5h-5") }
     val Clock by lazy { icon("clock", "M22 12a10 10 0 1 1-20 0 10 10 0 0 1 20 0z", "M12 6v6l4 2") }
+    val Note by lazy { icon("note", "M12 20h9", "M16.5 3.5a2.1 2.1 0 0 1 3 3L7 19l-4 1 1-4z") }
+    val Plus by lazy { icon("plus", "M12 5v14", "M5 12h14") }
     val Play by lazy { icon("play", "M7 4v16l13-8z") }
 
     // Task type icons, keyed like the server's TaskDb.ICONS
