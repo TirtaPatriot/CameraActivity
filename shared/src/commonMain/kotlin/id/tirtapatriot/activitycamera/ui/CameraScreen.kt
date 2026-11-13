@@ -208,6 +208,18 @@ fun CameraScreen(
         else -> null
     }
 
+    /** Stores a finished capture: straight away, or held for review when "confirm after capture" is on. */
+    suspend fun keepCapture(record: CaptureRecord) {
+        if (settings.confirmAfterCapture) {
+            repository.add(record.copy(confirmed = false))
+            withContext(Dispatchers.Main) { onOpenReview(record.clientId) }
+        } else {
+            repository.add(record)
+            justCaptured = record.clientId
+            AppGraph.requestSync()
+        }
+    }
+
     /** Saving runs in the app scope so it finishes even if the officer leaves the camera right away. */
     fun savePhoto(raw: RawPhoto, record: CaptureRecord, geo: GeoFix?, takenAt: Long) {
         val spec = buildSpec(settings.watermark, takenAt, geo)
@@ -218,18 +230,6 @@ fun CameraScreen(
             } else {
                 toast = strings.photoFailed
             }
-        }
-    }
-
-    /** Stores a finished capture: straight away, or held for review when "confirm after capture" is on. */
-    suspend fun keepCapture(record: CaptureRecord) {
-        if (settings.confirmAfterCapture) {
-            repository.add(record.copy(confirmed = false))
-            withContext(Dispatchers.Main) { onOpenReview(record.clientId) }
-        } else {
-            repository.add(record)
-            justCaptured = record.clientId
-            AppGraph.requestSync()
         }
     }
 
