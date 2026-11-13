@@ -13,6 +13,8 @@ import androidx.compose.ui.geometry.Size
 import androidx.compose.ui.graphics.Color
 import androidx.compose.ui.graphics.Shadow
 import androidx.compose.ui.graphics.drawscope.DrawScope
+import androidx.compose.ui.graphics.drawscope.rotate
+import androidx.compose.ui.graphics.drawscope.translate
 import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.TextMeasurer
 import androidx.compose.ui.text.TextStyle
@@ -37,6 +39,8 @@ fun WatermarkOverlay(
     spec: WatermarkSpec,
     modifier: Modifier = Modifier,
     draggable: Boolean = true,
+    /** How the phone is held (0/90/180/270): the photo will be landscape at 90/270, so preview it that way. */
+    rotation: Int = 0,
     onMove: (anchorX: Float, anchorY: Float) -> Unit = { _, _ -> },
     onMoveEnd: () -> Unit = {},
 ) {
@@ -82,9 +86,23 @@ fun WatermarkOverlay(
         val measure = TextMeasure { text, sizePx, bold ->
             textMeasurer.measure(text, styleFor(this, sizePx, bold, 0xFFFFFFFFL, false), softWrap = false, maxLines = 1).size.width.toFloat()
         }
-        val layout = WatermarkLayout.layout(spec, size.width, size.height, measure)
-        lastLayout.value = layout
-        drawWatermark(layout, textMeasurer)
+        if (rotation == 0) {
+            val layout = WatermarkLayout.layout(spec, size.width, size.height, measure)
+            lastLayout.value = layout
+            drawWatermark(layout, textMeasurer)
+        } else {
+            // Lay out on the frame the photo will have, then turn it to read upright for the officer.
+            val sideways = rotation == 90 || rotation == 270
+            val frameWidth = if (sideways) size.height else size.width
+            val frameHeight = if (sideways) size.width else size.height
+            val layout = WatermarkLayout.layout(spec, frameWidth, frameHeight, measure)
+            lastLayout.value = null
+            rotate(-rotation.toFloat(), pivot = center) {
+                translate((size.width - frameWidth) / 2f, (size.height - frameHeight) / 2f) {
+                    drawWatermark(layout, textMeasurer)
+                }
+            }
+        }
     }
 }
 

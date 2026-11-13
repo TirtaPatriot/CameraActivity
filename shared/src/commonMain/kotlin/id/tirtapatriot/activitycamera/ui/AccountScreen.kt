@@ -159,6 +159,23 @@ fun AccountScreen(
                         onCheckedChange = { on -> AppGraph.settingsStore.update { it.copy(confirmAfterCapture = on) } },
                     )
                 }
+                Spacer(Modifier.size(12.dp))
+                Row(
+                    Modifier.fillMaxWidth().clickable {
+                        AppGraph.settingsStore.update { it.copy(mirrorFrontPhotos = !it.mirrorFrontPhotos) }
+                    },
+                    verticalAlignment = Alignment.CenterVertically,
+                ) {
+                    Column(Modifier.weight(1f)) {
+                        Text(strings.mirrorFrontPhotos, fontSize = 15.sp, color = Palette.Text)
+                        Text(strings.mirrorFrontPhotosHint, fontSize = 13.sp, color = Palette.TextMuted)
+                    }
+                    Spacer(Modifier.size(8.dp))
+                    Switch(
+                        checked = settings.mirrorFrontPhotos,
+                        onCheckedChange = { on -> AppGraph.settingsStore.update { it.copy(mirrorFrontPhotos = on) } },
+                    )
+                }
             }
 
             // Language

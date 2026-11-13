@@ -38,6 +38,8 @@ data class AppSettings(
     val selectedCustomTask: String? = null,
     /** After the shutter, show the capture first; it is only kept and uploaded once confirmed. */
     val confirmAfterCapture: Boolean = false,
+    /** Save front-camera photos mirrored, as seen on screen; off = true to life, text in the scene readable. */
+    val mirrorFrontPhotos: Boolean = false,
     /** Watermark as arranged by the officer. */
     val watermark: WatermarkPrefs = WatermarkPrefs(),
 ) {

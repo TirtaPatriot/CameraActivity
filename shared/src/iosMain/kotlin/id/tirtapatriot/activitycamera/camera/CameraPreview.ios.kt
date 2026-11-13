@@ -128,8 +128,16 @@ private class IosCameraController : CameraController {
         }
     }
 
-    override suspend fun capture(flash: FlashMode): RawPhoto? {
+    override suspend fun capture(flash: FlashMode, mirrorFront: Boolean): RawPhoto? {
         if (!isConfigured) return null
+        photoOutput.connectionWithMediaType(MEDIA_TYPE_VIDEO)?.let { connection ->
+            connection.videoOrientation = captureOrientation()
+            // Explicit: front-camera photos are true to life unless the officer asked for mirrored ones.
+            if (connection.supportsVideoMirroring) {
+                connection.automaticallyAdjustsVideoMirroring = false
+                connection.videoMirrored = mirrorFront && currentDevice?.position == AVCaptureDevicePositionFront
+            }
+        }
         val settings = AVCapturePhotoSettings.photoSettings()
         if (currentDevice?.hasFlash == true) {
             settings.flashMode = when (flash) {
@@ -149,6 +157,7 @@ private class IosCameraController : CameraController {
     /** On iOS the microphone input is attached in prepare() when allowed; [withAudio] is not used yet. */
     override fun startRecording(outputPath: String, withAudio: Boolean, flash: FlashMode): Boolean {
         if (!isConfigured || isRecordingNow) return false
+        movieOutput.connectionWithMediaType(MEDIA_TYPE_VIDEO)?.videoOrientation = captureOrientation()
         if (flash == FlashMode.ON) setTorch(true)
         val finished = CompletableDeferred<Boolean>()
         recordingFinished = finished
@@ -201,7 +210,22 @@ private class IosCameraController : CameraController {
         device.unlockForConfiguration()
     }
 
-    /** The app is locked to portrait. */
+    /** Physical rotation from rememberDeviceRotation(): 0, 90 (left side up), 180, 270 (right side up). */
+    private var deviceRotation = 0
+
+    override fun setDeviceRotation(degrees: Int) {
+        deviceRotation = degrees
+    }
+
+    /** Photo/video orientation for how the phone is held (the UI itself stays portrait). */
+    private fun captureOrientation(): Long = when (deviceRotation) {
+        90 -> AVCaptureVideoOrientationLandscapeLeft // home side on the left
+        180 -> AVCaptureVideoOrientationPortraitUpsideDown
+        270 -> AVCaptureVideoOrientationLandscapeRight
+        else -> AVCaptureVideoOrientationPortrait
+    }
+
+    /** Default orientation until a capture sets the current one. */
     private fun lockPortrait() {
         photoOutput.connectionWithMediaType(MEDIA_TYPE_VIDEO)?.videoOrientation = AVCaptureVideoOrientationPortrait
         movieOutput.connectionWithMediaType(MEDIA_TYPE_VIDEO)?.videoOrientation = AVCaptureVideoOrientationPortrait

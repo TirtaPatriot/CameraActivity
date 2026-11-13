@@ -32,6 +32,7 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.collectAsState
@@ -60,6 +61,9 @@ import id.tirtapatriot.activitycamera.AppGraph
 import id.tirtapatriot.activitycamera.camera.CameraController
 import id.tirtapatriot.activitycamera.camera.CameraPreview
 import id.tirtapatriot.activitycamera.camera.FlashMode
+import id.tirtapatriot.activitycamera.camera.LocalIconRotation
+import id.tirtapatriot.activitycamera.camera.rememberDeviceRotation
+import id.tirtapatriot.activitycamera.camera.rememberUprightRotation
 import id.tirtapatriot.activitycamera.camera.RawPhoto
 import id.tirtapatriot.activitycamera.camera.WatermarkFormatter
 import id.tirtapatriot.activitycamera.camera.WatermarkPrefs
@@ -140,6 +144,10 @@ fun CameraScreen(
             delay(1_000)
         }
     }
+    // The UI stays portrait; icons, the watermark preview and the saved photo follow how the phone is held.
+    val deviceRotation = rememberDeviceRotation()
+    val iconRotation by rememberUprightRotation(deviceRotation)
+    LaunchedEffect(controller, deviceRotation) { controller?.setDeviceRotation(deviceRotation) }
     LaunchedEffect(allowedModes) {
         if (mode !in allowedModes && pendingVideo == null) mode = allowedModes.last()
     }
@@ -249,7 +257,7 @@ fun CameraScreen(
                     val takenAt = currentEpochMs()
                     val geo = fix
                     val raw = try {
-                        camera.capture(flash)
+                        camera.capture(flash, settings.mirrorFrontPhotos)
                     } finally {
                         isCapturing = false
                     }
@@ -328,6 +336,7 @@ fun CameraScreen(
     val recordingSeconds = pendingVideo?.let { ((now - it.meta.takenAtEpochMs) / 1_000).coerceAtLeast(0) }
     val latest = captures.firstOrNull()
 
+    CompositionLocalProvider(LocalIconRotation provides iconRotation) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
         Column(Modifier.fillMaxSize()) {
             Spacer(Modifier.statusBarsPadding().height(56.dp))
@@ -337,6 +346,9 @@ fun CameraScreen(
                 if (showGrid) GridLines(Modifier.fillMaxSize())
                 if (mode == MediaType.PHOTO) {
                     WatermarkOverlay(
+                        rotation = deviceRotation,
+                        // dragging maps to the portrait frame only
+                        draggable = deviceRotation == 0,
                         spec = buildSpec(prefs, now, fix),
                         modifier = Modifier.fillMaxSize(),
                         onMove = { x, y -> dragAnchor = x to y },
@@ -575,6 +587,7 @@ fun CameraScreen(
             )
         }
     }
+    }
 }
 
 @Composable
@@ -597,10 +610,11 @@ fun GlassIconButton(
         contentAlignment = Alignment.Center,
     ) {
         val tint = if (active) Color(0xFFFFD54F) else Color.White
+        val turn = LocalIconRotation.current
         if (label != null) {
-            Text(label, color = tint, fontSize = (size * 0.32f).sp, fontWeight = FontWeight.Bold, maxLines = 1)
+            Text(label, color = tint, fontSize = (size * 0.32f).sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.graphicsLayer { rotationZ = turn })
         } else {
-            Icon(icon, contentDescription, tint = tint, modifier = Modifier.size((size * 0.48f).dp))
+            Icon(icon, contentDescription, tint = tint, modifier = Modifier.size((size * 0.48f).dp).graphicsLayer { rotationZ = turn })
         }
     }
 }
@@ -685,7 +699,13 @@ private fun LatestThumb(latest: CaptureRecord?, enabled: Boolean, onClick: () ->
         } else {
             val path = AppGraph.repository.filePath(latest)
             val bitmap by rememberThumbnail(path, latest.meta.mediaType == MediaType.VIDEO, 160)
-            bitmap?.let { Image(it, null, contentScale = ContentScale.Crop, modifier = Modifier.fillMaxSize().clip(shape)) }
+            val turn = LocalIconRotation.current
+            bitmap?.let {
+                Image(
+                    it, null, contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxSize().clip(shape).graphicsLayer { rotationZ = turn },
+                )
+            }
                 ?: Icon(if (latest.meta.mediaType == MediaType.VIDEO) AppIcons.Video else AppIcons.Images, null, tint = Color.White, modifier = Modifier.size(22.dp))
         }
     }

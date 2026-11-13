@@ -75,7 +75,7 @@ private class AndroidCameraController(
 
     override val isRecording: Boolean get() = activeRecording != null
 
-    override suspend fun capture(flash: FlashMode): RawPhoto? {
+    override suspend fun capture(flash: FlashMode, mirrorFront: Boolean): RawPhoto? {
         cameraX.imageCaptureFlashMode = when (flash) {
             FlashMode.OFF -> ImageCapture.FLASH_MODE_OFF
             FlashMode.ON -> ImageCapture.FLASH_MODE_ON
@@ -84,7 +84,10 @@ private class AndroidCameraController(
         val rawFile = File(context.cacheDir, "capture_${System.nanoTime()}.jpg")
         val saved = suspendCancellableCoroutine<Boolean> { continuation ->
             cameraX.takePicture(
-                ImageCapture.OutputFileOptions.Builder(rawFile).build(),
+                ImageCapture.OutputFileOptions.Builder(rawFile)
+                    // Set explicitly, so CameraX doesn't decide the mirroring for front-camera photos.
+                    .setMetadata(ImageCapture.Metadata().apply { isReversedHorizontal = mirrorFront && isFrontCamera })
+                    .build(),
                 ContextCompat.getMainExecutor(context),
                 object : ImageCapture.OnImageSavedCallback {
                     override fun onImageSaved(outputFileResults: ImageCapture.OutputFileResults) {
@@ -137,6 +140,11 @@ private class AndroidCameraController(
         cameraX.cameraSelector =
             if (cameraX.cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA) CameraSelector.DEFAULT_BACK_CAMERA else CameraSelector.DEFAULT_FRONT_CAMERA
     }
+
+    private val isFrontCamera: Boolean get() = cameraX.cameraSelector == CameraSelector.DEFAULT_FRONT_CAMERA
+
+    // CameraController already follows the motion sensor for photo/video orientation (auto-rotation).
+    override fun setDeviceRotation(degrees: Int) = Unit
 
     override fun setZoom(ratio: Float) {
         val state = cameraX.zoomState.value

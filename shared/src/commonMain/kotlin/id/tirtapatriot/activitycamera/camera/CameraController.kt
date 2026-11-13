@@ -23,8 +23,11 @@ interface RawPhoto {
 interface CameraController {
     val isRecording: Boolean
 
-    /** Captures a photo as fast as possible; null on failure. */
-    suspend fun capture(flash: FlashMode): RawPhoto?
+    /**
+     * Captures a photo as fast as possible; null on failure. The photo is upright for how the phone
+     * is held; front-camera photos are mirrored (like the preview) only when [mirrorFront] is on.
+     */
+    suspend fun capture(flash: FlashMode, mirrorFront: Boolean): RawPhoto?
 
     /** Starts recording video to [outputPath]. */
     fun startRecording(outputPath: String, withAudio: Boolean, flash: FlashMode): Boolean
@@ -34,6 +37,9 @@ interface CameraController {
 
     /** Switches between the back and front camera. */
     fun switchCamera()
+
+    /** How the phone is held (see rememberDeviceRotation); Android's CameraX follows the sensor itself. */
+    fun setDeviceRotation(degrees: Int)
 
     /** Zoom ratio, e.g. 1f or 2f; clamped to what the camera supports. */
     fun setZoom(ratio: Float)

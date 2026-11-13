@@ -98,6 +98,8 @@ interface Strings {
     val confirmAfterCaptureHint: String
     val keep: String
     val retakeDiscard: String
+    val mirrorFrontPhotos: String
+    val mirrorFrontPhotosHint: String
     val connectToServer: String
 
     // Watermark sheet & stamp
@@ -235,6 +237,8 @@ object IndonesianStrings : Strings {
     override val confirmAfterCaptureHint = "Tinjau dulu setiap foto; baru disimpan dan dikirim setelah Anda pilih Simpan."
     override val keep = "Simpan"
     override val retakeDiscard = "Ulangi (buang)"
+    override val mirrorFrontPhotos = "Cerminkan foto kamera depan"
+    override val mirrorFrontPhotosHint = "Hasil persis seperti di layar. Saat mati, tulisan di lokasi terbaca normal."
     override val connectToServer = "Hubungkan ke server"
 
     override val watermarkHint = "Geser watermark di layar untuk memindahkannya"
@@ -377,6 +381,8 @@ object EnglishStrings : Strings {
     override val confirmAfterCaptureHint = "Review each photo first; it is kept and uploaded only after you tap Keep."
     override val keep = "Keep"
     override val retakeDiscard = "Retake (discard)"
+    override val mirrorFrontPhotos = "Mirror front-camera photos"
+    override val mirrorFrontPhotosHint = "Saved exactly as on screen. When off, text in the scene reads normally."
     override val connectToServer = "Connect to server"
 
     override val watermarkHint = "Drag the watermark on screen to move it"

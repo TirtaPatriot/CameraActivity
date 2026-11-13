@@ -17,19 +17,14 @@ internal object Watermark {
     private const val JPEG_QUALITY = 90
 
     fun burn(source: File, destination: File, spec: WatermarkSpec?, geo: GeoFix?) {
-        val rotationDegrees = when (
-            ExifInterface(source.absolutePath).getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
-        ) {
-            ExifInterface.ORIENTATION_ROTATE_90 -> 90f
-            ExifInterface.ORIENTATION_ROTATE_180 -> 180f
-            ExifInterface.ORIENTATION_ROTATE_270 -> 270f
-            else -> 0f
-        }
+        val orientation = ExifInterface(source.absolutePath)
+            .getAttributeInt(ExifInterface.TAG_ORIENTATION, ExifInterface.ORIENTATION_NORMAL)
+        val transform = orientationMatrix(orientation)
 
         val decoded = BitmapFactory.decodeFile(source.absolutePath, BitmapFactory.Options().apply { inMutable = true })
             ?: error("Unable to decode photo")
-        val upright = if (rotationDegrees != 0f) {
-            Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, Matrix().apply { postRotate(rotationDegrees) }, true)
+        val upright = if (transform != null) {
+            Bitmap.createBitmap(decoded, 0, 0, decoded.width, decoded.height, transform, true)
                 .also { if (it !== decoded) decoded.recycle() }
         } else {
             decoded
@@ -49,6 +44,18 @@ internal object Watermark {
             spec?.let { setAttribute(ExifInterface.TAG_IMAGE_DESCRIPTION, it.plainText()) }
             saveAttributes()
         }
+    }
+
+    /** All eight EXIF orientations (rotations and mirrored variants, e.g. front-camera photos); null = as is. */
+    private fun orientationMatrix(orientation: Int): Matrix? = when (orientation) {
+        ExifInterface.ORIENTATION_FLIP_HORIZONTAL -> Matrix().apply { setScale(-1f, 1f) }
+        ExifInterface.ORIENTATION_ROTATE_180 -> Matrix().apply { setRotate(180f) }
+        ExifInterface.ORIENTATION_FLIP_VERTICAL -> Matrix().apply { setScale(1f, -1f) }
+        ExifInterface.ORIENTATION_TRANSPOSE -> Matrix().apply { setRotate(90f); postScale(-1f, 1f) }
+        ExifInterface.ORIENTATION_ROTATE_90 -> Matrix().apply { setRotate(90f) }
+        ExifInterface.ORIENTATION_TRANSVERSE -> Matrix().apply { setRotate(-90f); postScale(-1f, 1f) }
+        ExifInterface.ORIENTATION_ROTATE_270 -> Matrix().apply { setRotate(-90f) }
+        else -> null
     }
 
     private fun draw(canvas: Canvas, width: Float, height: Float, spec: WatermarkSpec) {
