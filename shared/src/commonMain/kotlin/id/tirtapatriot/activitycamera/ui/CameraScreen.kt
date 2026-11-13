@@ -32,6 +32,8 @@ import androidx.compose.foundation.shape.RoundedCornerShape
 import androidx.compose.material3.Icon
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import id.tirtapatriot.activitycamera.camera.WatermarkSpec
+import androidx.compose.runtime.State
 import androidx.compose.runtime.CompositionLocalProvider
 import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.LaunchedEffect
@@ -103,8 +105,9 @@ fun CameraScreen(
     val store = AppGraph.settingsStore
     val repository = AppGraph.repository
     val timeZone = remember { TimeZone.currentSystemDefault() }
-    val fix by locationProvider.fix.collectAsState()
-    val captures by repository.items.collectAsState()
+    // Read only inside small child composables / event handlers, so GPS updates don't recompose the screen.
+    val fixState = locationProvider.fix.collectAsState()
+    val fix by fixState
 
     val policy = settings.config.capture
     val branding = settings.config.branding
@@ -127,7 +130,6 @@ fun CameraScreen(
     var isCapturing by remember { mutableStateOf(false) }
     var sheet by remember { mutableStateOf(CameraSheet.NONE) }
     var toast by remember { mutableStateOf<String?>(null) }
-    var now by remember { mutableLongStateOf(currentEpochMs()) }
     var justCaptured by remember { mutableStateOf<String?>(null) }
     // Drag position while moving the watermark; saved when the finger lifts.
     var dragAnchor by remember { mutableStateOf<Pair<Float, Float>?>(null) }
@@ -138,15 +140,9 @@ fun CameraScreen(
         locationProvider.start()
         onDispose { locationProvider.stop() }
     }
-    LaunchedEffect(Unit) {
-        while (true) {
-            now = currentEpochMs()
-            delay(1_000)
-        }
-    }
     // The UI stays portrait; icons, the watermark preview and the saved photo follow how the phone is held.
     val deviceRotation = rememberDeviceRotation()
-    val iconRotation by rememberUprightRotation(deviceRotation)
+    val iconRotation = rememberUprightRotation(deviceRotation)
     LaunchedEffect(controller, deviceRotation) { controller?.setDeviceRotation(deviceRotation) }
     LaunchedEffect(allowedModes) {
         if (mode !in allowedModes && pendingVideo == null) mode = allowedModes.last()
@@ -333,8 +329,6 @@ fun CameraScreen(
     }
 
     val isRecording = pendingVideo != null
-    val recordingSeconds = pendingVideo?.let { ((now - it.meta.takenAtEpochMs) / 1_000).coerceAtLeast(0) }
-    val latest = captures.firstOrNull()
 
     CompositionLocalProvider(LocalIconRotation provides iconRotation) {
     Box(Modifier.fillMaxSize().background(Color.Black)) {
@@ -345,12 +339,11 @@ fun CameraScreen(
                 CameraPreview(Modifier.fillMaxSize()) { controller = it }
                 if (showGrid) GridLines(Modifier.fillMaxSize())
                 if (mode == MediaType.PHOTO) {
-                    WatermarkOverlay(
+                    LiveWatermark(
+                        prefs = prefs,
+                        fix = fixState,
+                        buildSpec = ::buildSpec,
                         rotation = deviceRotation,
-                        // dragging maps to the portrait frame only
-                        draggable = deviceRotation == 0,
-                        spec = buildSpec(prefs, now, fix),
-                        modifier = Modifier.fillMaxSize(),
                         onMove = { x, y -> dragAnchor = x to y },
                         onMoveEnd = {
                             dragAnchor?.let { (x, y) ->
@@ -379,20 +372,11 @@ fun CameraScreen(
                     Box(Modifier.align(Alignment.TopEnd).size(10.dp).background(Color(0xFFFFB300), CircleShape).border(1.5.dp, Color.Black, CircleShape))
                 }
             }
-            if (recordingSeconds != null) {
-                Row(
-                    Modifier.glass(RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 8.dp),
-                    verticalAlignment = Alignment.CenterVertically,
-                ) {
-                    Box(Modifier.size(8.dp).background(Palette.Record, CircleShape))
-                    Spacer(Modifier.size(8.dp))
-                    Text(
-                        "${formatDuration(recordingSeconds)} / ${formatDuration(policy.maxVideoSeconds.toLong())}",
-                        color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
-                    )
-                }
+            val recording = pendingVideo
+            if (recording != null) {
+                RecordingPill(recording.meta.takenAtEpochMs, policy.maxVideoSeconds)
             } else {
-                GpsPill(fix)
+                GpsPill(fixState)
             }
             Spacer(Modifier.weight(1f))
             GlassIconButton(
@@ -484,7 +468,7 @@ fun CameraScreen(
                 verticalAlignment = Alignment.CenterVertically,
             ) {
                 Box(Modifier.weight(1f), contentAlignment = Alignment.CenterStart) {
-                    LatestThumb(latest, enabled = !isRecording, onClick = onOpenHistory)
+                    LatestThumb(enabled = !isRecording, onClick = onOpenHistory)
                     // Fully qualified: inside Row → Box, the RowScope overload would be picked and is not allowed here.
                     androidx.compose.animation.AnimatedVisibility(
                         visible = justCaptured != null && !isRecording,
@@ -568,7 +552,7 @@ fun CameraScreen(
         ) {
             WatermarkSheet(
                 prefs = settings.watermark,
-                previewSpec = { buildSpec(it, now, fix) },
+                previewSpec = { buildSpec(it, currentEpochMs(), fixState.value) },
                 onChange = { changed -> store.update { it.copy(watermark = changed) } },
                 onClose = { sheet = CameraSheet.NONE },
             )
@@ -612,16 +596,17 @@ fun GlassIconButton(
         val tint = if (active) Color(0xFFFFD54F) else Color.White
         val turn = LocalIconRotation.current
         if (label != null) {
-            Text(label, color = tint, fontSize = (size * 0.32f).sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.graphicsLayer { rotationZ = turn })
+            Text(label, color = tint, fontSize = (size * 0.32f).sp, fontWeight = FontWeight.Bold, maxLines = 1, modifier = Modifier.graphicsLayer { rotationZ = turn.value })
         } else {
-            Icon(icon, contentDescription, tint = tint, modifier = Modifier.size((size * 0.48f).dp).graphicsLayer { rotationZ = turn })
+            Icon(icon, contentDescription, tint = tint, modifier = Modifier.size((size * 0.48f).dp).graphicsLayer { rotationZ = turn.value })
         }
     }
 }
 
 @Composable
-private fun GpsPill(fix: GeoFix?) {
+private fun GpsPill(fixState: State<GeoFix?>) {
     val strings = LocalStrings.current
+    val fix = fixState.value
     val (label, color) = when {
         fix == null -> strings.gpsSearching to Color.White.copy(alpha = 0.85f)
         fix.isMock -> strings.mockLocation to Color(0xFFFFB300)
@@ -684,7 +669,10 @@ private fun ZoomPill(zoom: Float, onZoom: (Float) -> Unit) {
 }
 
 @Composable
-private fun LatestThumb(latest: CaptureRecord?, enabled: Boolean, onClick: () -> Unit) {
+private fun LatestThumb(enabled: Boolean, onClick: () -> Unit) {
+    // Collected here, not by the camera screen: sync status changes only redraw this thumbnail.
+    val items by AppGraph.repository.items.collectAsState()
+    val latest = items.firstOrNull()
     val shape = RoundedCornerShape(14.dp)
     Box(
         Modifier
@@ -703,7 +691,7 @@ private fun LatestThumb(latest: CaptureRecord?, enabled: Boolean, onClick: () ->
             bitmap?.let {
                 Image(
                     it, null, contentScale = ContentScale.Crop,
-                    modifier = Modifier.fillMaxSize().clip(shape).graphicsLayer { rotationZ = turn },
+                    modifier = Modifier.fillMaxSize().clip(shape).graphicsLayer { rotationZ = turn.value },
                 )
             }
                 ?: Icon(if (latest.meta.mediaType == MediaType.VIDEO) AppIcons.Video else AppIcons.Images, null, tint = Color.White, modifier = Modifier.size(22.dp))
@@ -740,6 +728,59 @@ private fun GridLines(modifier: Modifier) {
         }
     }
 }
+
+/** Watermark with its own clock: ticks once a minute (the stamp shows hh:mm), redrawing only itself. */
+@Composable
+private fun LiveWatermark(
+    prefs: WatermarkPrefs,
+    fix: State<GeoFix?>,
+    buildSpec: (WatermarkPrefs, Long, GeoFix?) -> WatermarkSpec,
+    rotation: Int,
+    onMove: (Float, Float) -> Unit,
+    onMoveEnd: () -> Unit,
+) {
+    var now by remember { mutableLongStateOf(currentEpochMs()) }
+    LaunchedEffect(Unit) {
+        while (true) {
+            delay(MINUTE_MS - currentEpochMs() % MINUTE_MS + 20)
+            now = currentEpochMs()
+        }
+    }
+    WatermarkOverlay(
+        spec = buildSpec(prefs, now, fix.value),
+        modifier = Modifier.fillMaxSize(),
+        rotation = rotation,
+        // dragging maps to the portrait frame only
+        draggable = rotation == 0,
+        onMove = onMove,
+        onMoveEnd = onMoveEnd,
+    )
+}
+
+/** Elapsed / maximum recording time; ticks every second on its own. */
+@Composable
+private fun RecordingPill(startedAtEpochMs: Long, maxSeconds: Int) {
+    var elapsed by remember(startedAtEpochMs) { mutableLongStateOf(0L) }
+    LaunchedEffect(startedAtEpochMs) {
+        while (true) {
+            elapsed = ((currentEpochMs() - startedAtEpochMs) / 1_000).coerceAtLeast(0)
+            delay(1_000)
+        }
+    }
+    Row(
+        Modifier.glass(RoundedCornerShape(50)).padding(horizontal = 12.dp, vertical = 8.dp),
+        verticalAlignment = Alignment.CenterVertically,
+    ) {
+        Box(Modifier.size(8.dp).background(Palette.Record, CircleShape))
+        Spacer(Modifier.size(8.dp))
+        Text(
+            "${formatDuration(elapsed)} / ${formatDuration(maxSeconds.toLong())}",
+            color = Color.White, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+        )
+    }
+}
+
+private const val MINUTE_MS = 60_000L
 
 internal fun currentEpochMs(): Long = Clock.System.now().toEpochMilliseconds()
 

@@ -39,5 +39,8 @@ fun rememberUprightRotation(deviceRotation: Int): State<Float> {
     return animateFloatAsState(target, tween(250), label = "upright")
 }
 
-/** Degrees the camera icons are turned (see [rememberUprightRotation]). */
-val LocalIconRotation = compositionLocalOf { 0f }
+/**
+ * Degrees the camera icons are turned (see [rememberUprightRotation]). A State, read inside
+ * graphicsLayer, so the rotation animation redraws only the icons instead of recomposing the screen.
+ */
+val LocalIconRotation = compositionLocalOf<State<Float>> { mutableFloatStateOf(0f) }

@@ -2,6 +2,7 @@ package id.tirtapatriot.activitycamera.ui
 
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
+import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxSize
@@ -82,19 +83,22 @@ fun App(cameraPermissionGranted: Boolean, onRequestPermissions: () -> Unit) {
     val strings = stringsFor(settings.effectiveLanguage)
     CompositionLocalProvider(LocalStrings provides strings) {
         BrandedTheme(settings.config.branding.primaryColor) {
+            // Screens stack in one Box (the live camera can sit under the review screen).
+            Box(Modifier.fillMaxSize()) {
+            // The camera stays alive under the review screen, so going back to it is instant
+            // (no camera restart). Same slot in the tree for both routes keeps its state.
+            val cameraAlive = cameraPermissionGranted && (route == Route.Camera || (route is Route.Review && stack.size == 2))
+            if (cameraAlive) {
+                CameraScreen(
+                    settings = settings,
+                    locationProvider = rememberLocationProvider(),
+                    onOpenReview = { push(Route.Review(it)) },
+                    onOpenHistory = { push(Route.History) },
+                    onOpenAccount = { push(Route.Account) },
+                )
+            }
             when (val current = route) {
-                Route.Camera ->
-                    if (cameraPermissionGranted) {
-                        CameraScreen(
-                            settings = settings,
-                            locationProvider = rememberLocationProvider(),
-                            onOpenReview = { push(Route.Review(it)) },
-                            onOpenHistory = { push(Route.History) },
-                            onOpenAccount = { push(Route.Account) },
-                        )
-                    } else {
-                        PermissionPrompt(onRequestPermissions)
-                    }
+                Route.Camera -> if (!cameraPermissionGranted) PermissionPrompt(onRequestPermissions)
 
                 is Route.Review -> ReviewScreen(
                     settings = settings,
@@ -147,6 +151,7 @@ fun App(cameraPermissionGranted: Boolean, onRequestPermissions: () -> Unit) {
                     onChangeServer = { stack = stack.dropLast(1) + Route.Connect },
                     onSkip = { pop() },
                 )
+            }
             }
         }
     }

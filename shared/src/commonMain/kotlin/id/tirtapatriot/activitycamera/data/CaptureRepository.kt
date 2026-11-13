@@ -2,7 +2,10 @@ package id.tirtapatriot.activitycamera.data
 
 import id.tirtapatriot.activitycamera.model.CaptureMetadata
 import id.tirtapatriot.activitycamera.platform.mediaDirectory
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.launch
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
@@ -50,11 +53,20 @@ class CaptureRepository(private val baseDir: String = mediaDirectory()) {
     /** Newest first. */
     val items: StateFlow<List<CaptureRecord>> = _items.asStateFlow()
 
+    // Loaded off the main thread so a long history never delays opening the camera.
+    private val loaded = CompletableDeferred<Unit>()
+
     init {
-        LocalFiles.ensureDir(baseDir)
-        // A capture left unconfirmed (app closed during review) is kept rather than lost.
-        _items.value = load().map { if (it.confirmed) it else it.copy(confirmed = true) }
+        CoroutineScope(Dispatchers.Default).launch {
+            LocalFiles.ensureDir(baseDir)
+            // A capture left unconfirmed (app closed during review) is kept rather than lost.
+            _items.value = load().map { if (it.confirmed) it else it.copy(confirmed = true) }
+            loaded.complete(Unit)
+        }
     }
+
+    /** Suspends until the index has been read (sync waits for it). */
+    suspend fun awaitLoaded() = loaded.await()
 
     fun filePath(fileName: String): String = "$baseDir/$fileName"
 
@@ -95,6 +107,7 @@ class CaptureRepository(private val baseDir: String = mediaDirectory()) {
 
     private suspend fun mutate(change: (List<CaptureRecord>) -> List<CaptureRecord>) =
         withContext(Dispatchers.Default) {
+            loaded.await()
             mutex.withLock {
                 val next = change(_items.value)
                 LocalFiles.writeText(indexPath, json.encodeToString(listSerializer, next))

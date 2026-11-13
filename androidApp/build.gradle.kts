@@ -40,7 +40,10 @@ android {
     }
     buildTypes {
         release {
-            isMinifyEnabled = false
+            // R8: shrinks and optimizes Compose/Kotlin code — the biggest single speed-up for the UI.
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
             if (releaseKeystore != null) signingConfig = signingConfigs.getByName("release")
         }
     }

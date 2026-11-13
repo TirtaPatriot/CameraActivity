@@ -55,6 +55,7 @@ class SyncClient(
         if (!settings.canUpload) return SyncResult(0, 0, SyncSkipReason.SIGN_IN_REQUIRED)
         val token = settings.authToken.takeIf { settings.isSignedIn }
         if (!running.tryLock()) return SyncResult(0, 0, SyncSkipReason.ALREADY_RUNNING)
+        repository.awaitLoaded()
         try {
             var uploaded = 0
             var failed = 0
